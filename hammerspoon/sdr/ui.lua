@@ -21,12 +21,19 @@ local function url_decode(s)
   return s:gsub('%%(%x%x)', function(h) return string.char(tonumber(h, 16)) end)
 end
 
-local function handle_navigation(action, webview, navID, url)
-  if not url or not url:find('^sdr://') then return false end
+-- policyCallback: decide allow/block per navigation.
+--   action == 'navigation' → navAction.request.URL is the target
+--   return true to allow, false to block
+local function policy_callback(action, webview, details)
+  if action ~= 'navigation' then return true end
+  local url = details and details.request and details.request.URL
+  if type(url) ~= 'string' then return true end
+  if not url:find('^sdr://') then return true end -- allow non-sdr (file://, etc)
+
+  -- Intercept sdr://
   local rest = url:sub(7) -- strip "sdr://"
-  -- Format: "sdr://<handler>?<jsonpayload-urlencoded>"
   local handler_name, payload_str = rest:match('^([^?]+)%??(.*)$')
-  if not handler_name then return true end
+  if not handler_name then return false end
   local payload = {}
   if payload_str and #payload_str > 0 then
     local ok, decoded = pcall(json.decode, url_decode(payload_str))
@@ -35,22 +42,20 @@ local function handle_navigation(action, webview, navID, url)
   local fn = handlers[handler_name]
   if not fn then
     hs.printf('sdr ui: unknown handler %s', handler_name)
-    return true
+    return false
   end
   local ok, result = pcall(fn, payload)
   if not ok then
     hs.printf('sdr ui handler error %s: %s', handler_name, tostring(result))
   end
-  -- Push result back to JS as window.SDR_BRIDGE_RESPONSE(<reqid>, <json>)
   if payload.reqid then
     local enc = json.encode({ ok = ok, result = result })
-    -- Escape for JS string literal
     local esc = enc:gsub('\\', '\\\\'):gsub("'", "\\'")
     webview:evaluateJavaScript(string.format(
       "window.SDR_BRIDGE_RESPONSE && window.SDR_BRIDGE_RESPONSE(%q, '%s')",
       tostring(payload.reqid), esc))
   end
-  return true -- don't actually navigate
+  return false -- block actual navigation
 end
 
 function M.push(event_name, data)
@@ -73,7 +78,7 @@ function M.open(repo_root)
     :windowStyle({ 'titled', 'closable', 'miniaturizable', 'resizable' })
     :allowTextEntry(true)
     :allowNewWindows(false)
-    :navigationCallback(handle_navigation)
+    :policyCallback(policy_callback)
     :url(html_url)
     :show()
     :bringToFront(true)
