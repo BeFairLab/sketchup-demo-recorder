@@ -1,0 +1,15 @@
+.DS_Store
+*.log
+*.tmp
+node_modules/
+.vscode/
+.idea/
+
+# Local recordings / sandbox
+recordings/
+out/
+build/
+tmp/
+
+# OS
+Thumbs.db
