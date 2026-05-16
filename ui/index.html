@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>SketchUp Demo Recorder</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header>
+    <h1>SketchUp Demo Recorder</h1>
+    <div class="status">
+      <span id="status-dot" class="dot idle"></span>
+      <span id="status-text">idle</span>
+    </div>
+  </header>
+
+  <section class="row">
+    <div class="seq-controls">
+      <label>Sequence
+        <select id="seq-select"></select>
+      </label>
+      <input id="seq-name" placeholder="new-sequence-name">
+      <button id="btn-new">New</button>
+      <button id="btn-load">Load</button>
+      <button id="btn-save">Save</button>
+      <button id="btn-ping">Ping Companion</button>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Viewport</h2>
+    <div class="row">
+      <label><input type="radio" name="vp-mode" value="viewport" checked> Viewport (model area)</label>
+      <label><input type="radio" name="vp-mode" value="window"> Window</label>
+    </div>
+    <div class="row">
+      <label>Preset
+        <select id="vp-preset">
+          <option value="youtube_1080p" data-w="1920" data-h="1080">YouTube 1920×1080</option>
+          <option value="youtube_4k"    data-w="3840" data-h="2160">YouTube 4K 3840×2160</option>
+          <option value="reels_1080p"   data-w="1080" data-h="1920">Reels/TikTok 1080×1920</option>
+          <option value="square_1080"   data-w="1080" data-h="1080">Square 1080×1080</option>
+          <option value="custom" data-w="" data-h="">Custom…</option>
+        </select>
+      </label>
+      <label>W <input type="number" id="vp-w" value="1920" style="width:80px"></label>
+      <label>H <input type="number" id="vp-h" value="1080" style="width:80px"></label>
+      <button id="btn-apply-vp">Apply to SketchUp</button>
+      <button id="btn-show-overlay">Show overlay</button>
+      <button id="btn-hide-overlay">Hide</button>
+    </div>
+    <div id="vp-region" class="muted">region: not set</div>
+  </section>
+
+  <section class="card">
+    <h2>Recording</h2>
+    <div class="row">
+      <button id="btn-rec" class="primary">● Record clicks</button>
+      <span class="muted">hotkey: ⌃⌥⌘R</span>
+      <span id="rec-events" class="muted">0 events</span>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Timeline <span id="timeline-meta" class="muted"></span></h2>
+    <div class="row">
+      <button id="btn-play">▶ Play (no capture)</button>
+      <button id="btn-capture" class="primary">⏺ Record + Replay</button>
+      <span class="muted">⌃⌥⌘P play, ⌃⌥⌘C capture</span>
+    </div>
+    <div id="timeline" class="timeline"></div>
+  </section>
+
+  <section class="card">
+    <h2>Last output</h2>
+    <div id="last-output" class="muted">—</div>
+  </section>
+
+  <script src="app.js"></script>
+</body>
+</html>
