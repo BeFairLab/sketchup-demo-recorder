@@ -130,7 +130,6 @@ local function handle_event(e)
     })
 
   elseif etype == types.scrollWheel then
-    local props = e:getProperty
     -- API: scrollWheelEventDeltaAxis1 (vertical), Axis2 (horizontal)
     local dy = e:getProperty(hs.eventtap.event.properties.scrollWheelEventDeltaAxis1) or 0
     local dx = e:getProperty(hs.eventtap.event.properties.scrollWheelEventDeltaAxis2) or 0
