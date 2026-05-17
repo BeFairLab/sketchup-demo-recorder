@@ -32,13 +32,15 @@ local function url_decode(s)
 end
 
 -- HTTP request handler. Routes:
---   GET /call/<handler>?p=<urlencoded-json>   → returns handler result as JSON
---   GET /push?since=<id>                       → long-poll; returns queued push events
---   GET /                                      → serves index.html (so we don't need file://)
+--   POST /call/<handler>  body=<json>          → handler result as JSON
+--   GET  /push                                 → drain push queue (long-poll style)
+--   GET  /                                     → index.html (port injected)
+--   GET  /static/<file>                        → ui/<file>
+--
+-- We use POST for /call because hs.httpserver's setCallback strips query
+-- strings from the path argument, leaving us no way to read GET params.
 local function http_handler(method, path, headers, body)
-  -- Extract handler + query
-  local route, qs = path:match('^([^?]+)%??(.*)$')
-  route = route or path
+  local route = path
 
   if route == '/' or route == '/index.html' then
     local repo_root = M._repo_root
@@ -46,14 +48,13 @@ local function http_handler(method, path, headers, body)
     local f = io.open(repo_root .. '/ui/index.html', 'r')
     if not f then return 'index missing', 500, {} end
     local html = f:read('*a'); f:close()
-    -- Inject the port so JS knows where to call back.
     html = html:gsub('</head>',
       string.format('<script>window.SDR_PORT=%d;</script></head>', server_port))
     return html, 200, { ['Content-Type'] = 'text/html; charset=utf-8' }
   end
 
   if route:match('^/static/') then
-    local rel = route:sub(9) -- strip /static/
+    local rel = route:sub(9)
     local repo_root = M._repo_root
     local fp = repo_root .. '/ui/' .. rel
     local f = io.open(fp, 'r')
@@ -69,12 +70,9 @@ local function http_handler(method, path, headers, body)
   local handler_name = route:match('^/call/(.+)$')
   if handler_name then
     local payload = {}
-    if qs and #qs > 0 then
-      local p = qs:match('p=([^&]+)')
-      if p then
-        local ok, decoded = pcall(json.decode, url_decode(p))
-        if ok and type(decoded) == 'table' then payload = decoded end
-      end
+    if body and #body > 0 then
+      local ok, decoded = pcall(json.decode, body)
+      if ok and type(decoded) == 'table' then payload = decoded end
     end
     local fn = handlers[handler_name]
     if not fn then
@@ -87,7 +85,6 @@ local function http_handler(method, path, headers, body)
   end
 
   if route == '/push' then
-    -- Long-poll: return queue immediately. JS reconnects after each response.
     local items = push_queue
     push_queue = {}
     return safe_json({ events = items }), 200,

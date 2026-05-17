@@ -6,8 +6,11 @@
   const BASE = 'http://127.0.0.1:' + PORT;
 
   async function callLua(handler, payload) {
-    const p = encodeURIComponent(JSON.stringify(payload || {}));
-    const resp = await fetch(BASE + '/call/' + handler + '?p=' + p);
+    const resp = await fetch(BASE + '/call/' + handler, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload || {}),
+    });
     const data = await resp.json();
     if (data.ok) return data.result;
     throw new Error(typeof data.result === 'string' ? data.result : JSON.stringify(data.result));
