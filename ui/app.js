@@ -174,10 +174,16 @@
   document.getElementById('btn-new').addEventListener('click', async () => {
     const name = document.getElementById('seq-name').value.trim();
     if (!name) return alert('enter a name');
-    currentSeq = await callLua('new_sequence', { name });
-    applySeqToUI();
-    renderTimeline();
-    refreshSequenceList();
+    try {
+      currentSeq = await callLua('new_sequence', { name });
+      applySeqToUI();
+      renderTimeline();
+      refreshSequenceList();
+      document.getElementById('last-output').textContent = 'created: ' + name;
+    } catch (e) {
+      alert('new_sequence failed: ' + e.message);
+      document.getElementById('last-output').textContent = 'ERR new: ' + e.message;
+    }
   });
 
   document.getElementById('btn-load').addEventListener('click', () => {
@@ -204,15 +210,26 @@
   });
 
   document.getElementById('btn-apply-vp').addEventListener('click', async () => {
-    readVpFromUI();
-    const result = await callLua('apply_viewport', { sequence: currentSeq });
-    if (result.error) {
-      document.getElementById('vp-region').textContent = 'ERROR: ' + result.error;
-    } else {
-      const r = result.region;
+    if (!currentSeq) {
       document.getElementById('vp-region').textContent =
-        `region: ${r.x},${r.y} ${r.w}×${r.h}`;
-      currentSeq.viewport.region = r;
+        'ERROR: no currentSeq in JS (click New first, watch for errors)';
+      return;
+    }
+    readVpFromUI();
+    try {
+      const result = await callLua('apply_viewport', { sequence: currentSeq });
+      if (result && result.error) {
+        document.getElementById('vp-region').textContent = 'ERROR: ' + result.error;
+      } else if (result && result.region) {
+        const r = result.region;
+        document.getElementById('vp-region').textContent =
+          `region: ${r.x},${r.y} ${r.w}×${r.h}`;
+        currentSeq.viewport.region = r;
+      } else {
+        document.getElementById('vp-region').textContent = 'ERROR: unexpected result ' + JSON.stringify(result);
+      }
+    } catch (e) {
+      document.getElementById('vp-region').textContent = 'ERR apply: ' + e.message;
     }
   });
 
