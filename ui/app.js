@@ -101,7 +101,8 @@
 
     const pb = currentSeq.playback || {};
     document.getElementById('auto-path').checked = pb.auto_path === true;
-    document.getElementById('auto-path-pps').value = pb.auto_path_pps || 1500;
+    document.getElementById('auto-path-pps').value = pb.auto_path_pps || 1000;
+    document.getElementById('auto-path-easing').value = pb.auto_path_easing || 'in_out';
     document.getElementById('click-effects').checked = pb.show_click_effects === true;
   }
 
@@ -109,7 +110,8 @@
     if (!currentSeq) return;
     currentSeq.playback = currentSeq.playback || {};
     currentSeq.playback.auto_path          = document.getElementById('auto-path').checked;
-    currentSeq.playback.auto_path_pps      = parseInt(document.getElementById('auto-path-pps').value, 10) || 1500;
+    currentSeq.playback.auto_path_pps      = parseInt(document.getElementById('auto-path-pps').value, 10) || 1000;
+    currentSeq.playback.auto_path_easing   = document.getElementById('auto-path-easing').value || 'in_out';
     currentSeq.playback.show_click_effects = document.getElementById('click-effects').checked;
   }
 
@@ -128,8 +130,27 @@
   }
 
   // ─── Timeline ──────────────────────────────────────────────────
+  // Includes interpolation travel time when auto_path is on.
   function totalDurationMs(seq) {
-    return (seq.events || []).reduce((acc, e) => acc + (e.pause_before_ms || 0), 0);
+    const pb = seq.playback || {};
+    const ap = pb.auto_path === true;
+    const pps = pb.auto_path_pps || 1000;
+    let total = 0;
+    let prev = null;
+    for (const e of seq.events || []) {
+      if (ap && e.type === 'mouse_move') continue;
+      total += (e.pause_before_ms || 0);
+      if (ap && (e.type === 'mouse_down' || e.type === 'mouse_up')) {
+        const x = (e.x_window != null ? e.x_window : e.x);
+        const y = (e.y_window != null ? e.y_window : e.y);
+        if (prev && x != null && y != null) {
+          const dx = x - prev.x, dy = y - prev.y;
+          total += Math.sqrt(dx*dx + dy*dy) / Math.max(50, pps) * 1000;
+        }
+        if (x != null && y != null) prev = { x, y };
+      }
+    }
+    return total;
   }
 
   function renderTimeline() {
@@ -306,7 +327,44 @@
     renderTimeline();
   });
   document.getElementById('click-effects').addEventListener('change', readPlaybackFromUI);
-  document.getElementById('auto-path-pps').addEventListener('change', readPlaybackFromUI);
+  document.getElementById('auto-path-pps').addEventListener('change', () => {
+    readPlaybackFromUI();
+    renderTimeline();
+  });
+  document.getElementById('auto-path-easing').addEventListener('change', readPlaybackFromUI);
+
+  document.getElementById('btn-apply-auto').addEventListener('click', async () => {
+    if (!currentSeq) return;
+    const events = currentSeq.events || [];
+    // Strip mouse_move events; preserve pause_before by rolling their pauses
+    // into the next surviving event.
+    const out = [];
+    let pendingPause = 0;
+    for (const e of events) {
+      if (e.type === 'mouse_move') {
+        pendingPause += (e.pause_before_ms || 0);
+      } else {
+        const clone = Object.assign({}, e);
+        clone.pause_before_ms = (clone.pause_before_ms || 0) + pendingPause;
+        pendingPause = 0;
+        out.push(clone);
+      }
+    }
+    if (pendingPause > 0 && out.length) {
+      out[out.length - 1].pause_before_ms = (out[out.length - 1].pause_before_ms || 0) + pendingPause;
+    }
+    const dropped = events.length - out.length;
+    if (!confirm(`Drop ${dropped} mouse_move events from the sequence? (cannot be undone in-app — save your file first if unsure)`)) return;
+    currentSeq.events = out;
+    // Re-id events
+    currentSeq.events.forEach((e, i) => {
+      e.id = 'evt_' + String(i + 1).padStart(4, '0');
+    });
+    readPlaybackFromUI();
+    await callLua('save_sequence', { sequence: currentSeq });
+    renderTimeline();
+    document.getElementById('last-output').textContent = `Dropped ${dropped} moves; ${out.length} events left`;
+  });
 
   document.getElementById('btn-rec').addEventListener('click', async () => {
     if (!currentSeq) return alert('load a sequence first');

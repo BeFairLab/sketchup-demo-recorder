@@ -19,8 +19,20 @@ local su_anchor = nil
 
 -- Auto-path state set per .play() call.
 local auto_path = false
-local auto_path_pps = 1500
+local auto_path_pps = 1000
+local auto_path_easing = 'in_out'
 local show_click_effects = false
+
+local function ease(t, kind)
+  if kind == 'linear' then return t
+  elseif kind == 'in'    then return t * t * t
+  elseif kind == 'out'   then local u = 1 - t; return 1 - u * u * u
+  else -- in_out
+    if t < 0.5 then return 4 * t * t * t end
+    local u = -2 * t + 2
+    return 1 - u * u * u / 2
+  end
+end
 
 -- Last cursor position posted by replayer. Used as start point for auto-path
 -- interpolation to the next event location.
@@ -106,7 +118,7 @@ local function next_click_xy(events, from_i)
 end
 
 -- Animate cursor from last_cursor to (tx, ty) over distance/auto_path_pps
--- seconds, then call on_done. ~60 steps/sec.
+-- seconds, then call on_done. ~60 fps. Easing applied via ease(t).
 local function animate_to(tx, ty, on_done)
   if not last_cursor then
     hs.mouse.absolutePosition({ x = tx, y = ty })
@@ -128,7 +140,7 @@ local function animate_to(tx, ty, on_done)
   local k = 0
   local function step()
     k = k + 1
-    local t = k / steps
+    local t = ease(k / steps, auto_path_easing)
     local x = sx + dx * t
     local y = sy + dy * t
     hs.mouse.absolutePosition({ x = x, y = y })
@@ -155,7 +167,8 @@ function M.play(sequence, opts)
 
   local pb = (sequence.playback or {})
   auto_path = pb.auto_path == true
-  auto_path_pps = tonumber(pb.auto_path_pps) or 1500
+  auto_path_pps = tonumber(pb.auto_path_pps) or 1000
+  auto_path_easing = pb.auto_path_easing or 'in_out'
   show_click_effects = pb.show_click_effects == true
 
   -- When auto_path, drop recorded mouse_move events; we'll interpolate.
@@ -228,8 +241,27 @@ end
 
 function M.total_duration_ms(sequence, lead_ms, tail_ms)
   local total = (lead_ms or 0) + (tail_ms or 0)
+  local pb = sequence.playback or {}
+  local ap  = pb.auto_path == true
+  local pps = tonumber(pb.auto_path_pps) or 1000
+  local prev_xy = nil
   for _, e in ipairs(sequence.events) do
-    total = total + math.max(0, e.pause_before_ms or 0)
+    if ap and e.type == 'mouse_move' then
+      -- skipped in playback
+    else
+      total = total + math.max(0, e.pause_before_ms or 0)
+      if ap and (e.type == 'mouse_down' or e.type == 'mouse_up') then
+        local x = e.x_window and (e.x_window) or e.x
+        local y = e.y_window and (e.y_window) or e.y
+        if prev_xy and x and y then
+          local dx = x - prev_xy.x
+          local dy = y - prev_xy.y
+          local dist = math.sqrt(dx * dx + dy * dy)
+          total = total + (dist / math.max(50, pps)) * 1000
+        end
+        if x and y then prev_xy = { x = x, y = y } end
+      end
+    end
   end
   return total
 end

@@ -68,14 +68,24 @@
   <section class="card">
     <h2>Playback</h2>
     <div class="row">
-      <label><input type="checkbox" id="auto-path"> Auto-path (drop recorded moves, straight-line robot motion)</label>
+      <label><input type="checkbox" id="auto-path"> Auto-path (straight-line robot motion between clicks)</label>
       <label>Speed
-        <input type="number" id="auto-path-pps" value="1500" min="100" max="8000" step="100" style="width:80px">
+        <input type="number" id="auto-path-pps" value="1000" min="100" max="8000" step="100" style="width:80px">
         <span class="muted">px/s</span>
+      </label>
+      <label>Easing
+        <select id="auto-path-easing">
+          <option value="in_out" selected>Ease in-out</option>
+          <option value="out">Ease out</option>
+          <option value="in">Ease in</option>
+          <option value="linear">Linear</option>
+        </select>
       </label>
     </div>
     <div class="row">
       <label><input type="checkbox" id="click-effects"> Show click circles (visible in mp4)</label>
+      <button id="btn-apply-auto">Apply auto-path to timeline</button>
+      <span class="muted">drops mouse_move events permanently</span>
     </div>
   </section>
 
