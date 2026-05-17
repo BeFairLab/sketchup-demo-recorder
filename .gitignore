@@ -1,5 +1,7 @@
 .DS_Store
-sequences/nil.json
+
+# User sequences are personal data, not source.
+sequences/*.json
 *.log
 *.tmp
 node_modules/
