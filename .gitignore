@@ -1,7 +1,8 @@
 .DS_Store
 
-# User sequences are personal data, not source.
+# User sequences and presets are personal data, not source.
 sequences/*.json
+presets/*.json
 *.log
 *.tmp
 node_modules/
