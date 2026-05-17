@@ -66,6 +66,10 @@ local function register_handlers()
     return store.list()
   end)
 
+  ui.register('get_active_sequence', function(_)
+    return { name = current_seq_name, sequence = current_seq }
+  end)
+
   ui.register('load_sequence', function(payload)
     local seq = ensure_seq(payload.name)
     return seq
@@ -137,9 +141,14 @@ local function register_handlers()
   ui.register('play', function(payload)
     if not current_seq then return { error = 'no sequence' } end
     local seq = payload.sequence or current_seq
+    -- Bring SketchUp to foreground BEFORE replay — otherwise events go to UI.
+    local app = hs.application.find('SketchUp')
+    if app then app:activate() end
     set_status('replaying')
+    -- Lead defaults to 800ms so SU has time to fully focus before first event.
+    local lead = payload.lead_ms or 800
     replayer.play(seq, {
-      lead_ms = payload.lead_ms or 0,
+      lead_ms = lead,
       tail_ms = payload.tail_ms or 0,
       on_progress = function(i, n, e)
         ui.push('replay_progress', { i = i, n = n, type = e.type })
@@ -161,7 +170,8 @@ local function register_handlers()
 
     local lead = payload.lead_ms or 1000
     local tail = payload.tail_ms or 1000
-    local out_dir = payload.out_dir or (os.getenv('HOME') .. '/Movies/sdr')
+    -- Default output dir: ~/Desktop (per user preference). Caller can override.
+    local out_dir = payload.out_dir or (os.getenv('HOME') .. '/Desktop')
     hs.fs.mkdir(out_dir)
     local out_path = string.format('%s/%s_%s.mov', out_dir, seq.name, os.date('%Y%m%d_%H%M%S'))
 
@@ -171,6 +181,10 @@ local function register_handlers()
     local ok, err = capture.start(seq.viewport.region, out_path, cap_seconds)
     if not ok then return { error = 'capture: ' .. err } end
     set_status('capturing')
+
+    -- Bring SU to foreground so replayed events land in SU, not the UI window.
+    local app = hs.application.find('SketchUp')
+    if app then app:activate() end
 
     -- Brief settle delay so capture grabs the start frame.
     hs.timer.doAfter(0.7, function()

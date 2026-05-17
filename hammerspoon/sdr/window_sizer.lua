@@ -46,12 +46,12 @@ function M.apply(viewport, chrome_offsets)
     local frame = win:frame()
     local scale = backing_scale(frame)
 
-    -- Companion-reported viewport pixel size (post-resize). Trust this over
-    -- the requested width/height in case SU clamped to display bounds.
-    local vp_px_w = (result and result.viewport and result.viewport.w) or viewport.width
-    local vp_px_h = (result and result.viewport and result.viewport.h) or viewport.height
-    local vp_pt_w = vp_px_w / scale
-    local vp_pt_h = vp_px_h / scale
+    -- IMPORTANT: SketchUp's view.vpwidth / view.vpheight return LOGICAL POINTS
+    -- on Retina (not raw pixels), even though Sketchup.resize_viewport takes
+    -- PIXEL arguments. So when companion reports {viewport: {w, h}} those are
+    -- already in logical points — do NOT divide by backing scale.
+    local vp_pt_w = (result and result.viewport and result.viewport.w) or (viewport.width  / scale)
+    local vp_pt_h = (result and result.viewport and result.viewport.h) or (viewport.height / scale)
 
     -- Region anchored to bottom-of-window minus status bar.
     local region = {

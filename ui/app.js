@@ -242,6 +242,22 @@
   });
 
   // ─── Init ──────────────────────────────────────────────────────
-  refreshSequenceList();
-  pollPushLoop();
+  (async () => {
+    await refreshSequenceList();
+    // Auto-load the persisted active sequence (set on the Lua side).
+    try {
+      const active = await callLua('get_active_sequence', {});
+      if (active && active.name && active.sequence) {
+        currentSeq = active.sequence;
+        document.getElementById('seq-name').value = active.name;
+        const sel = document.getElementById('seq-select');
+        if ([...sel.options].some(o => o.value === active.name)) {
+          sel.value = active.name;
+        }
+        applySeqToUI();
+        renderTimeline();
+      }
+    } catch (_) { /* no active sequence */ }
+    pollPushLoop();
+  })();
 })();

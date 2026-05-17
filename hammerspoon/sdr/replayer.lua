@@ -9,49 +9,50 @@ local active_timer = nil
 local on_done_callback = nil
 local on_progress_callback = nil
 
-local function flags_from_modifiers(mods)
-  local out = {}
-  for _, m in ipairs(mods or {}) do out[m] = true end
-  return out
+-- hs.eventtap.event APIs expect modifiers as an array of strings
+-- (e.g. {'cmd','shift'}). We store the same format on record.
+local function mods_array(mods)
+  if type(mods) ~= 'table' then return {} end
+  return mods
 end
+
+-- True until the next mouse_up — so we can post drag events instead of plain
+-- mouseMoved when the cursor moves with a button held.
+local drag_active = false
 
 local function post_event(evt)
   if evt.type == 'mouse_down' then
     local btn = evt.button == 'right' and event_t.types.rightMouseDown
              or evt.button == 'middle' and event_t.types.otherMouseDown
              or event_t.types.leftMouseDown
-    event_t.newMouseEvent(btn, { x = evt.x, y = evt.y }, flags_from_modifiers(evt.modifiers)):post()
+    drag_active = true
+    event_t.newMouseEvent(btn, { x = evt.x, y = evt.y }, mods_array(evt.modifiers)):post()
 
   elseif evt.type == 'mouse_up' then
     local btn = evt.button == 'right' and event_t.types.rightMouseUp
              or evt.button == 'middle' and event_t.types.otherMouseUp
              or event_t.types.leftMouseUp
-    event_t.newMouseEvent(btn, { x = evt.x, y = evt.y }, flags_from_modifiers(evt.modifiers)):post()
+    drag_active = false
+    event_t.newMouseEvent(btn, { x = evt.x, y = evt.y }, mods_array(evt.modifiers)):post()
 
   elseif evt.type == 'mouse_move' then
-    -- Use mouseMoved + position.
+    -- Warp cursor AND post a synthetic motion event so SU tools react.
     hs.mouse.absolutePosition({ x = evt.x, y = evt.y })
+    local mt = drag_active and event_t.types.leftMouseDragged or event_t.types.mouseMoved
+    event_t.newMouseEvent(mt, { x = evt.x, y = evt.y }, {}):post()
 
   elseif evt.type == 'key_down' then
-    local key = evt.key
-    local mods = evt.modifiers or {}
-    -- newKeyEvent expects a key NAME (string) or keycode. We stored both.
-    -- Prefer keycode if present, else key.
-    local e
-    if evt.keycode then
-      e = event_t.newKeyEvent(mods, evt.keycode, true)
-    else
-      e = event_t.newKeyEvent(mods, key, true)
-    end
+    local mods = mods_array(evt.modifiers)
+    local e = evt.keycode
+      and event_t.newKeyEvent(mods, evt.keycode, true)
+      or  event_t.newKeyEvent(mods, evt.key,     true)
     e:post()
 
   elseif evt.type == 'key_up' then
-    local e
-    if evt.keycode then
-      e = event_t.newKeyEvent(evt.modifiers or {}, evt.keycode, false)
-    else
-      e = event_t.newKeyEvent(evt.modifiers or {}, evt.key, false)
-    end
+    local mods = mods_array(evt.modifiers)
+    local e = evt.keycode
+      and event_t.newKeyEvent(mods, evt.keycode, false)
+      or  event_t.newKeyEvent(mods, evt.key,     false)
     e:post()
 
   elseif evt.type == 'scroll' then
