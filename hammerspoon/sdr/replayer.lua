@@ -1,7 +1,11 @@
 -- replayer.lua — post mouse + keyboard events with pause_before timing.
+-- Supports auto_path mode: drops recorded mouse_moves and interpolates the
+-- cursor along a straight line between successive click positions at a
+-- configurable speed (pixels/sec). Optional click circles via effects.
 local eventtap = require('hs.eventtap')
 local event_t  = eventtap.event
 local kc       = hs.keycodes.map
+local effects  = require('sdr.effects')
 
 local M = {}
 
@@ -12,6 +16,15 @@ local on_progress_callback = nil
 -- Snapshot SU window position at replay start; rewrite window-relative coords
 -- (x_window/y_window) onto current absolute screen position.
 local su_anchor = nil
+
+-- Auto-path state set per .play() call.
+local auto_path = false
+local auto_path_pps = 1500
+local show_click_effects = false
+
+-- Last cursor position posted by replayer. Used as start point for auto-path
+-- interpolation to the next event location.
+local last_cursor = nil
 
 local function su_window_frame()
   local app = hs.application.find('SketchUp')
@@ -80,44 +93,128 @@ end
 
 -- Play sequence. Returns immediately; events fire asynchronously.
 -- opts: {on_done, on_progress, lead_ms, tail_ms}
+-- Pick the next click-position from index i onwards (for auto-path interp).
+-- Returns x, y or nil, nil if no more clicks ahead.
+local function next_click_xy(events, from_i)
+  for j = from_i, #events do
+    local e = events[j]
+    if e.type == 'mouse_down' or e.type == 'mouse_up' then
+      return resolved_xy(e)
+    end
+  end
+  return nil, nil
+end
+
+-- Animate cursor from last_cursor to (tx, ty) over distance/auto_path_pps
+-- seconds, then call on_done. ~60 steps/sec.
+local function animate_to(tx, ty, on_done)
+  if not last_cursor then
+    hs.mouse.absolutePosition({ x = tx, y = ty })
+    last_cursor = { x = tx, y = ty }
+    on_done()
+    return
+  end
+  local dx = tx - last_cursor.x
+  local dy = ty - last_cursor.y
+  local dist = math.sqrt(dx * dx + dy * dy)
+  if dist < 1.5 then
+    on_done()
+    return
+  end
+  local duration = dist / math.max(50, auto_path_pps)
+  local steps = math.max(2, math.floor(duration * 60 + 0.5))
+  local step_dur = duration / steps
+  local sx, sy = last_cursor.x, last_cursor.y
+  local k = 0
+  local function step()
+    k = k + 1
+    local t = k / steps
+    local x = sx + dx * t
+    local y = sy + dy * t
+    hs.mouse.absolutePosition({ x = x, y = y })
+    event_t.newMouseEvent(event_t.types.mouseMoved, { x = x, y = y }, {}):post()
+    if k < steps then
+      hs.timer.doAfter(step_dur, step)
+    else
+      last_cursor = { x = tx, y = ty }
+      on_done()
+    end
+  end
+  hs.timer.doAfter(step_dur, step)
+end
+
 function M.play(sequence, opts)
   if active_timer then return false, 'replay already in progress' end
   opts = opts or {}
   on_done_callback     = opts.on_done
   on_progress_callback = opts.on_progress
 
-  -- Snapshot SU window position at replay start so window-relative coords
-  -- map to today's screen position.
   su_anchor = su_window_frame()
   drag_active = false
+  last_cursor = nil
+
+  local pb = (sequence.playback or {})
+  auto_path = pb.auto_path == true
+  auto_path_pps = tonumber(pb.auto_path_pps) or 1500
+  show_click_effects = pb.show_click_effects == true
+
+  -- When auto_path, drop recorded mouse_move events; we'll interpolate.
+  local events = sequence.events
+  if auto_path then
+    local filtered = {}
+    for _, e in ipairs(events) do
+      if e.type ~= 'mouse_move' then table.insert(filtered, e) end
+    end
+    events = filtered
+  end
 
   local lead = opts.lead_ms or 0
   local tail = opts.tail_ms or 0
   local i = 1
-  local cumulative_ms = lead
 
-  local schedule
-  schedule = function()
-    if i > #sequence.events then
-      -- Tail then fire on_done.
+  local function trigger_click_effect(evt)
+    if not show_click_effects then return end
+    if evt.type == 'mouse_down' then
+      local x, y = resolved_xy(evt)
+      effects.click_dot(x, y)
+    end
+  end
+
+  local fire_next
+  fire_next = function()
+    if i > #events then
       hs.timer.doAfter(tail / 1000, function()
         active_timer = nil
         if on_done_callback then on_done_callback() end
       end)
       return
     end
-    local evt = sequence.events[i]
+    local evt = events[i]
     local pause = math.max(0, evt.pause_before_ms or 0)
-    hs.timer.doAfter(pause / 1000, function()
+
+    local function do_event()
       post_event(evt)
-      if on_progress_callback then on_progress_callback(i, #sequence.events, evt) end
+      if evt.type == 'mouse_down' or evt.type == 'mouse_up' or evt.type == 'mouse_move' then
+        last_cursor = { x = select(1, resolved_xy(evt)), y = select(2, resolved_xy(evt)) }
+      end
+      trigger_click_effect(evt)
+      if on_progress_callback then on_progress_callback(i, #events, evt) end
       i = i + 1
-      schedule()
+      fire_next()
+    end
+
+    hs.timer.doAfter(pause / 1000, function()
+      if auto_path and (evt.type == 'mouse_down' or evt.type == 'mouse_up') then
+        local tx, ty = resolved_xy(evt)
+        animate_to(tx, ty, do_event)
+      else
+        do_event()
+      end
     end)
   end
 
   active_timer = true
-  hs.timer.doAfter(lead / 1000, schedule)
+  hs.timer.doAfter(lead / 1000, fire_next)
   return true
 end
 

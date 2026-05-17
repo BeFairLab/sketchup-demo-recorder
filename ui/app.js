@@ -98,6 +98,19 @@
     const r = vp.region || {};
     document.getElementById('vp-region').textContent =
       r.w ? `region: ${r.x},${r.y} ${r.w}×${r.h}` : 'region: not set';
+
+    const pb = currentSeq.playback || {};
+    document.getElementById('auto-path').checked = pb.auto_path === true;
+    document.getElementById('auto-path-pps').value = pb.auto_path_pps || 1500;
+    document.getElementById('click-effects').checked = pb.show_click_effects === true;
+  }
+
+  function readPlaybackFromUI() {
+    if (!currentSeq) return;
+    currentSeq.playback = currentSeq.playback || {};
+    currentSeq.playback.auto_path          = document.getElementById('auto-path').checked;
+    currentSeq.playback.auto_path_pps      = parseInt(document.getElementById('auto-path-pps').value, 10) || 1500;
+    currentSeq.playback.show_click_effects = document.getElementById('click-effects').checked;
   }
 
   function readVpFromUI() {
@@ -123,11 +136,46 @@
     const wrap = document.getElementById('timeline');
     wrap.innerHTML = '';
     if (!currentSeq) return;
-    const events = currentSeq.events || [];
-    document.getElementById('timeline-meta').textContent =
-      `${events.length} events · ${(totalDurationMs(currentSeq) / 1000).toFixed(2)}s total`;
+    const allEvents = currentSeq.events || [];
+    const autoPath = (currentSeq.playback || {}).auto_path === true;
 
-    events.forEach((evt, idx) => {
+    // In auto-path mode: collapse runs of mouse_move into a single badge
+    // showing how many were dropped + their total pause.
+    let displayEvents = allEvents;
+    if (autoPath) {
+      displayEvents = [];
+      let pendingMoves = null;
+      for (const evt of allEvents) {
+        if (evt.type === 'mouse_move') {
+          if (!pendingMoves) pendingMoves = { count: 0, pause: 0 };
+          pendingMoves.count += 1;
+          pendingMoves.pause += (evt.pause_before_ms || 0);
+        } else {
+          if (pendingMoves) {
+            displayEvents.push({
+              _synthetic: true,
+              type: 'auto_path',
+              count: pendingMoves.count,
+              pause_before_ms: pendingMoves.pause,
+            });
+            pendingMoves = null;
+          }
+          displayEvents.push(evt);
+        }
+      }
+      if (pendingMoves) {
+        displayEvents.push({
+          _synthetic: true, type: 'auto_path',
+          count: pendingMoves.count, pause_before_ms: pendingMoves.pause
+        });
+      }
+    }
+
+    const totalShownMs = displayEvents.reduce((a, e) => a + (e.pause_before_ms || 0), 0);
+    document.getElementById('timeline-meta').textContent =
+      `${allEvents.length} events (${displayEvents.length} shown) · ${(totalShownMs/1000).toFixed(2)}s`;
+
+    displayEvents.forEach((evt, idx) => {
       // Pause chip BEFORE the event
       const pauseChip = document.createElement('span');
       pauseChip.className = 'chip pause';
@@ -147,24 +195,36 @@
       // Event chip
       const evChip = document.createElement('span');
       evChip.className = 'chip event ' + (evt.type || '');
-      evChip.title = JSON.stringify(evt, null, 2);
       let label = evt.type;
-      if (evt.type && evt.type.startsWith('mouse_')) {
+      if (evt._synthetic && evt.type === 'auto_path') {
+        label = `auto-path (${evt.count} moves)`;
+        evChip.title = 'mouse_move events that will be replaced by straight-line interpolation';
+      } else if (evt.type && evt.type.startsWith('mouse_')) {
         label += ` ${evt.button || ''} @${evt.x},${evt.y}`;
+        evChip.title = JSON.stringify(evt, null, 2);
       } else if (evt.type === 'key_down' || evt.type === 'key_up') {
         label += ` ${(evt.modifiers || []).map(m => m + '+').join('')}${evt.key || ''}`;
+        evChip.title = JSON.stringify(evt, null, 2);
+      } else {
+        evChip.title = JSON.stringify(evt, null, 2);
       }
       evChip.textContent = label;
-      evChip.addEventListener('click', () => {
-        const choice = prompt('Action: (d)elete  (c)omment  (s)kip', 'c');
-        if (choice === 'd') {
-          currentSeq.events.splice(idx, 1);
-          renderTimeline();
-        } else if (choice === 'c') {
-          const c = prompt('Comment:', evt.comment || '');
-          if (c !== null) { evt.comment = c; renderTimeline(); }
-        }
-      });
+      if (!evt._synthetic) {
+        evChip.addEventListener('click', () => {
+          const choice = prompt('Action: (d)elete  (c)omment  (s)kip', 'c');
+          if (choice === 'd') {
+            // Find this event in the underlying array (not the displayEvents view)
+            const realIdx = allEvents.indexOf(evt);
+            if (realIdx >= 0) {
+              currentSeq.events.splice(realIdx, 1);
+              renderTimeline();
+            }
+          } else if (choice === 'c') {
+            const c = prompt('Comment:', evt.comment || '');
+            if (c !== null) { evt.comment = c; renderTimeline(); }
+          }
+        });
+      }
       wrap.appendChild(evChip);
     });
   }
@@ -239,6 +299,15 @@
   document.getElementById('btn-show-overlay').addEventListener('click', () => callLua('show_overlay', {}));
   document.getElementById('btn-hide-overlay').addEventListener('click', () => callLua('hide_overlay', {}));
 
+  // Re-render timeline when playback flags change so auto-path collapsing
+  // reflects immediately.
+  document.getElementById('auto-path').addEventListener('change', () => {
+    readPlaybackFromUI();
+    renderTimeline();
+  });
+  document.getElementById('click-effects').addEventListener('change', readPlaybackFromUI);
+  document.getElementById('auto-path-pps').addEventListener('change', readPlaybackFromUI);
+
   document.getElementById('btn-rec').addEventListener('click', async () => {
     if (!currentSeq) return alert('load a sequence first');
     await callLua('start_record', {});
@@ -248,14 +317,18 @@
     }, 100);
   });
 
-  document.getElementById('btn-play').addEventListener('click', () => {
+  document.getElementById('btn-play').addEventListener('click', async () => {
     if (!currentSeq) return;
+    readPlaybackFromUI();
+    await callLua('save_sequence', { sequence: currentSeq });
     callLua('play', { sequence: currentSeq, lead_ms: 500, tail_ms: 500 });
   });
 
   document.getElementById('btn-capture').addEventListener('click', async () => {
     if (!currentSeq) return;
     readVpFromUI();
+    readPlaybackFromUI();
+    await callLua('save_sequence', { sequence: currentSeq });
     const r = await callLua('capture_and_play', { lead_ms: 1000, tail_ms: 1000 });
     if (r.error) alert(r.error);
     else document.getElementById('last-output').textContent = 'capturing → ' + r.output;
