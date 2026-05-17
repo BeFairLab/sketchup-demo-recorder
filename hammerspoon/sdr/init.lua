@@ -50,6 +50,19 @@ local function ensure_seq(name)
   return seq
 end
 
+-- Safe-frame overlays for crop-target previewing. Returns nil for non-universal
+-- presets. Sizes in LOGICAL POINTS (= pixels / retina_scale). Centered inside
+-- the recording region.
+local function safe_frames_for(vp)
+  if not vp or vp.preset ~= 'universal_2160' then return nil end
+  -- Built-in retina = 2. Universal source = 2160×2160 px = 1080×1080 pt.
+  -- YouTube 1920×1080 px = 960×540 pt. Reels 1080×1920 px = 540×960 pt.
+  return {
+    { name = 'YouTube 16:9', w = 960, h = 540, color = { 1.0, 0.85, 0.20 } },
+    { name = 'Reels 9:16',   w = 540, h = 960, color = { 1.0, 0.35, 0.35 } },
+  }
+end
+
 -- Auto-load the last-used sequence on boot. Silent if missing.
 local function restore_active_sequence()
   local name = hs.settings.get(SETTINGS_KEY_ACTIVE)
@@ -103,15 +116,15 @@ local function register_handlers()
   end)
 
   ui.register('show_overlay', function(_)
-    if recording_overlay then recording_overlay:delete(); recording_overlay = nil end
-    if current_seq and current_seq.viewport and current_seq.viewport.region then
-      recording_overlay = sizer.show_overlay(current_seq.viewport.region)
+    if not current_seq or not current_seq.viewport or not current_seq.viewport.region then
+      return { shown = false, error = 'apply viewport first' }
     end
-    return { shown = recording_overlay ~= nil }
+    sizer.show_overlay(current_seq.viewport.region, safe_frames_for(current_seq.viewport))
+    return { shown = true }
   end)
 
   ui.register('hide_overlay', function(_)
-    if recording_overlay then recording_overlay:delete(); recording_overlay = nil end
+    sizer.hide_overlay()
     return { hidden = true }
   end)
 
@@ -190,8 +203,12 @@ local function register_handlers()
 
     set_status('capturing')
 
+    -- Hide overlay so it's NOT baked into the captured video.
+    sizer.suppress_overlay()
+
     local ok, err = capture.start(seq.viewport.region, out_path, cap_seconds, function(exitCode, path, size)
       set_status('idle')
+      sizer.resume_overlay()
       if size <= 0 then
         ui.push('capture_done', { path = path, error = 'empty file (exit=' .. tostring(exitCode) .. ')' })
         notify('SDR capture FAILED', path .. ' empty (exit ' .. tostring(exitCode) .. ')')
@@ -202,6 +219,7 @@ local function register_handlers()
     end)
     if not ok then
       set_status('idle')
+      sizer.resume_overlay()
       return { error = 'capture: ' .. err }
     end
 

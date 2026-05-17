@@ -72,14 +72,17 @@ function M.apply(viewport, chrome_offsets)
     return region, nil, { x = frame.x, y = frame.y, w = frame.w, h = frame.h }
 
   elseif viewport.mode == 'window' then
-    local cur = win:frame()
-    -- Center while resizing.
+    -- viewport.width/height are PIXEL targets (so the captured mp4 hits that
+    -- exact resolution on Retina). hs.window:setFrame takes LOGICAL POINTS.
     local screen = win:screen() or hs.screen.primaryScreen()
     local sf = screen:frame()
+    local scale = backing_scale(sf)
+    local w_pt = viewport.width  / scale
+    local h_pt = viewport.height / scale
     win:setFrame({
-      x = math.floor(sf.x + (sf.w - viewport.width) / 2 + 0.5),
-      y = math.floor(sf.y + (sf.h - viewport.height) / 2 + 0.5),
-      w = viewport.width, h = viewport.height,
+      x = math.floor(sf.x + (sf.w - w_pt) / 2 + 0.5),
+      y = math.floor(sf.y + (sf.h - h_pt) / 2 + 0.5),
+      w = w_pt, h = h_pt,
     })
     hs.timer.usleep(100000)
     local frame = win:frame()
@@ -91,25 +94,143 @@ function M.apply(viewport, chrome_offsets)
   return nil, 'unknown viewport mode: ' .. tostring(viewport.mode)
 end
 
--- Show a translucent overlay showing the recording region. Returns the canvas.
-function M.show_overlay(region)
-  if not region then return nil end
-  local c = hs.canvas.new(region)
-  c:appendElements({
+-- Overlay state. Tracks SU window and follows its moves/resizes.
+local overlay_canvas = nil
+local overlay_offset = nil   -- {dx, dy, w, h} relative to SU window
+local overlay_filter = nil
+local overlay_safe_frames = nil  -- {{name,w,h,color}, ...} centered inside region
+
+local function frames_equal(a, b)
+  return a and b and a.x == b.x and a.y == b.y and a.w == b.w and a.h == b.h
+end
+
+local function rebuild_overlay_elements()
+  if not overlay_canvas or not overlay_offset then return end
+  overlay_canvas:replaceElements({
     type = 'rectangle',
     action = 'stroke',
     strokeColor = { red = 1, green = 0.2, blue = 0.2, alpha = 0.85 },
-    strokeWidth = 4,
+    strokeWidth = 3,
   }, {
     type = 'text',
-    text = string.format('Recording region  %d×%d', region.w, region.h),
-    textColor = { red = 1, green = 1, blue = 1, alpha = 1 },
+    text = string.format('Recording  %d×%d', overlay_offset.w, overlay_offset.h),
+    textColor = { red = 1, green = 1, blue = 1, alpha = 0.9 },
     textFont  = 'Menlo',
-    textSize  = 14,
-    frame = { x = 8, y = 8, w = 300, h = 22 },
+    textSize  = 13,
+    frame = { x = 6, y = 4, w = 240, h = 18 },
   })
-  c:show()
-  return c
+  if overlay_safe_frames then
+    for _, sf in ipairs(overlay_safe_frames) do
+      -- centered inside the outer recording region
+      local fx = (overlay_offset.w - sf.w) / 2
+      local fy = (overlay_offset.h - sf.h) / 2
+      overlay_canvas:appendElements({
+        type = 'rectangle',
+        action = 'fill',
+        fillColor = { red = sf.color[1], green = sf.color[2], blue = sf.color[3], alpha = 0.10 },
+        strokeColor = { red = sf.color[1], green = sf.color[2], blue = sf.color[3], alpha = 0.9 },
+        strokeWidth = 2,
+        frame = { x = fx, y = fy, w = sf.w, h = sf.h },
+      }, {
+        type = 'text',
+        text = string.format('%s  %d×%d', sf.name, sf.w, sf.h),
+        textColor = { red = sf.color[1], green = sf.color[2], blue = sf.color[3], alpha = 0.95 },
+        textFont  = 'Menlo',
+        textSize  = 12,
+        frame = { x = fx + 6, y = fy + 4, w = 220, h = 16 },
+      })
+    end
+  end
+end
+
+local function reposition_overlay()
+  if not overlay_canvas or not overlay_offset then return end
+  local win = find_su_window()
+  if not win then return end
+  local f = win:frame()
+  overlay_canvas:frame({
+    x = f.x + overlay_offset.dx,
+    y = f.y + overlay_offset.dy,
+    w = overlay_offset.w,
+    h = overlay_offset.h,
+  })
+end
+
+local function attach_window_follower()
+  if overlay_filter then return end
+  overlay_filter = hs.window.filter.new('SketchUp')
+    :subscribe({ hs.window.filter.windowMoved, hs.window.filter.windowResized },
+               function() reposition_overlay() end)
+end
+
+local function detach_window_follower()
+  if overlay_filter then
+    overlay_filter:unsubscribeAll()
+    overlay_filter = nil
+  end
+end
+
+-- Show overlay anchored to SU window using region absolute coords.
+-- safe_frames: optional list of {name, w, h, color={r,g,b}} drawn centered.
+function M.show_overlay(region, safe_frames)
+  if not region then return nil end
+  M.hide_overlay()
+
+  local win = find_su_window()
+  if win then
+    local f = win:frame()
+    overlay_offset = {
+      dx = region.x - f.x,
+      dy = region.y - f.y,
+      w  = region.w,
+      h  = region.h,
+    }
+  else
+    overlay_offset = { dx = 0, dy = 0, w = region.w, h = region.h }
+  end
+  overlay_safe_frames = safe_frames
+
+  overlay_canvas = hs.canvas.new(region)
+  rebuild_overlay_elements()
+  overlay_canvas:show()
+  attach_window_follower()
+  return overlay_canvas
+end
+
+function M.hide_overlay()
+  if overlay_canvas then overlay_canvas:delete(); overlay_canvas = nil end
+  overlay_offset = nil
+  overlay_safe_frames = nil
+  detach_window_follower()
+end
+
+function M.overlay_visible()
+  return overlay_canvas ~= nil
+end
+
+-- Temporarily hide overlay (for screen capture). Restore via show_overlay_resume.
+local saved_overlay_state = nil
+function M.suppress_overlay()
+  if overlay_canvas then
+    saved_overlay_state = { offset = overlay_offset, safe_frames = overlay_safe_frames }
+    M.hide_overlay()
+  else
+    saved_overlay_state = nil
+  end
+end
+
+function M.resume_overlay()
+  if not saved_overlay_state then return end
+  local win = find_su_window()
+  local f = win and win:frame() or { x = 0, y = 0 }
+  local region = {
+    x = f.x + saved_overlay_state.offset.dx,
+    y = f.y + saved_overlay_state.offset.dy,
+    w = saved_overlay_state.offset.w,
+    h = saved_overlay_state.offset.h,
+  }
+  M.show_overlay(region, saved_overlay_state.safe_frames)
+  saved_overlay_state = nil
 end
 
 return M
