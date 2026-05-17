@@ -14,16 +14,14 @@
     </div>
   </header>
 
-  <!-- Simplified header — only preset picker + Apply + overlay toggles -->
+  <!-- Header: preset picker + Apply + single overlay toggle -->
   <section class="card">
     <div class="row">
       <label>Preset
         <select id="preset-select"></select>
       </label>
       <button id="btn-apply-vp" class="primary">Apply to SketchUp</button>
-      <button id="btn-show-overlay">Show overlay</button>
-      <button id="btn-hide-overlay">Hide overlay</button>
-      <span class="muted">active timeline: <span id="timeline-active">— none —</span></span>
+      <button id="btn-toggle-overlay">Show overlay</button>
     </div>
     <div id="vp-region" class="muted">region: not set</div>
   </section>
@@ -87,11 +85,12 @@
 
     <section class="card">
       <div class="row">
-        <span class="muted">Editing preset: <span id="preset-active">— none —</span></span>
-        <input id="preset-name" placeholder="preset-name">
+        <label>Editing preset
+          <select id="preset-select-edit"></select>
+        </label>
         <button id="btn-preset-new">New… (prompt + save)</button>
         <button id="btn-preset-save">Save changes</button>
-        <button id="btn-preset-duplicate">Duplicate</button>
+        <button id="btn-preset-duplicate">Duplicate…</button>
       </div>
       <div class="row">
         <span class="muted" id="timeline-preset-link"></span>
@@ -100,6 +99,10 @@
 
     <section class="card">
       <h2>Viewport</h2>
+      <div class="row">
+        <button id="btn-apply-vp-2" class="primary">Apply to SketchUp</button>
+        <button id="btn-toggle-overlay-2">Show overlay</button>
+      </div>
       <div class="row">
         <label><input type="radio" name="vp-mode" value="viewport" checked> Viewport (model area)</label>
         <label><input type="radio" name="vp-mode" value="window"> Window</label>

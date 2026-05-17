@@ -213,11 +213,15 @@ local function register_handlers()
 
   ui.register('apply_preset', function(payload)
     if not payload or not payload.name then return { error = 'preset name required' } end
-    if not current_seq then return { error = 'no active sequence' } end
     local preset = store.load_preset(payload.name)
     if not preset then return { error = 'preset not found' } end
     local mismatch = nil
-    if current_seq.preset_name and current_seq.preset_name ~= payload.name then
+    -- Build a draft sequence on the fly if none is loaded, so the caller can
+    -- still examine the preset values via the returned sequence.
+    if not current_seq then
+      current_seq = store.new_sequence('__draft__')
+      current_seq_name = nil -- not persisted
+    elseif current_seq.preset_name and current_seq.preset_name ~= payload.name then
       mismatch = 'this timeline expects preset "' .. current_seq.preset_name ..
                  '"; applying "' .. payload.name .. '" instead'
     end

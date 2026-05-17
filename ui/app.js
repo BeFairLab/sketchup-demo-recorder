@@ -62,16 +62,16 @@
   let currentSeq = null;
 
   function updateActiveLabels() {
-    document.getElementById('preset-active').textContent =
-      currentSeq && currentSeq.preset_name ? currentSeq.preset_name : '— none —';
-    document.getElementById('timeline-active').textContent =
-      currentSeq && currentSeq.name ? currentSeq.name : '— none —';
+    const pa = document.getElementById('preset-active');
+    if (pa) pa.textContent = currentSeq && currentSeq.preset_name ? currentSeq.preset_name : '— none —';
+    const ta = document.getElementById('timeline-active');
+    if (ta) ta.textContent = currentSeq && currentSeq.name ? currentSeq.name : '— none —';
     const link = document.getElementById('timeline-preset-link');
     if (link) {
       if (currentSeq && currentSeq.preset_name) {
-        link.textContent = `Linked preset: ${currentSeq.preset_name} (loads automatically with this timeline)`;
+        link.textContent = `Linked preset: ${currentSeq.preset_name}`;
       } else {
-        link.textContent = 'No preset linked to this timeline.';
+        link.textContent = 'No preset linked.';
       }
     }
   }
@@ -90,13 +90,17 @@
 
   async function refreshPresetList() {
     const list = await callLua('list_presets', {});
-    const sel = document.getElementById('preset-select');
-    sel.innerHTML = '<option value="">— choose preset —</option>';
-    (list || []).forEach((n) => {
-      const o = document.createElement('option'); o.value = n; o.textContent = n;
-      sel.appendChild(o);
-    });
-    if (currentSeq && currentSeq.preset_name) sel.value = currentSeq.preset_name;
+    const buildOptions = (sel) => {
+      if (!sel) return;
+      sel.innerHTML = '<option value="">— choose preset —</option>';
+      (list || []).forEach((n) => {
+        const o = document.createElement('option'); o.value = n; o.textContent = n;
+        sel.appendChild(o);
+      });
+      if (currentSeq && currentSeq.preset_name) sel.value = currentSeq.preset_name;
+    };
+    buildOptions(document.getElementById('preset-select'));
+    buildOptions(document.getElementById('preset-select-edit'));
   }
 
   async function loadSequence(name) {
@@ -106,10 +110,9 @@
     applySeqToUI();
     renderTimeline();
     updateActiveLabels();
-    // Reflect linked preset in dropdown.
     if (seq.preset_name) {
       document.getElementById('preset-select').value = seq.preset_name;
-      document.getElementById('preset-name').value = seq.preset_name;
+      document.getElementById('preset-select-edit').value = seq.preset_name;
     }
   }
 
@@ -350,25 +353,53 @@
     if (currentSeq) await loadPresetIntoCurrentSeq(name);
   });
 
-  document.getElementById('btn-apply-vp').addEventListener('click', async () => {
-    if (!currentSeq) return alert('load a timeline first');
-    readAllFromUI();
+  async function applyViewport() {
+    // Build envelope from UI — works without a loaded timeline.
+    const envelope = buildPresetFromUI();
     try {
-      const result = await callLua('apply_viewport', { sequence: currentSeq });
+      const result = await callLua('apply_viewport', { sequence: envelope });
       if (result && result.error) {
         document.getElementById('vp-region').textContent = 'ERROR: ' + result.error;
       } else if (result && result.region) {
         const r = result.region;
         document.getElementById('vp-region').textContent = `region: ${r.x},${r.y} ${r.w}×${r.h}`;
-        currentSeq.viewport.region = r;
+        if (currentSeq) {
+          currentSeq.viewport = currentSeq.viewport || {};
+          currentSeq.viewport.region = r;
+          currentSeq.viewport._region_base = { x: r.x, y: r.y, w: r.w, h: r.h };
+        }
       }
     } catch (e) {
       document.getElementById('vp-region').textContent = 'ERR apply: ' + e.message;
     }
-  });
+  }
+  document.getElementById('btn-apply-vp').addEventListener('click', applyViewport);
+  document.getElementById('btn-apply-vp-2') &&
+    document.getElementById('btn-apply-vp-2').addEventListener('click', applyViewport);
 
-  document.getElementById('btn-show-overlay').addEventListener('click', () => callLua('show_overlay', {}));
-  document.getElementById('btn-hide-overlay').addEventListener('click', () => callLua('hide_overlay', {}));
+  // Single overlay toggle that flips between Show / Hide.
+  let overlayVisible = false;
+  function updateOverlayBtnLabels() {
+    const label = overlayVisible ? 'Hide overlay' : 'Show overlay';
+    ['btn-toggle-overlay', 'btn-toggle-overlay-2'].forEach((id) => {
+      const el = document.getElementById(id);
+      if (el) el.textContent = label;
+    });
+  }
+  async function toggleOverlay() {
+    if (overlayVisible) {
+      await callLua('hide_overlay', {});
+      overlayVisible = false;
+    } else {
+      const r = await callLua('show_overlay', {});
+      overlayVisible = !!(r && r.shown);
+      if (r && r.error) alert(r.error);
+    }
+    updateOverlayBtnLabels();
+  }
+  document.getElementById('btn-toggle-overlay').addEventListener('click', toggleOverlay);
+  document.getElementById('btn-toggle-overlay-2') &&
+    document.getElementById('btn-toggle-overlay-2').addEventListener('click', toggleOverlay);
 
   // ─── Timeline tab ──────────────────────────────────────────────
   document.getElementById('seq-select').addEventListener('change', (e) => loadSequence(e.target.value));
@@ -420,8 +451,31 @@
   }
 
   // ─── Preset tab ────────────────────────────────────────────────
-  // New preset = prompt → write current settings to <name>.json.
-  // Does NOT require a loaded timeline.
+  // The "Editing preset" dropdown drives which preset gets saved/duplicated.
+  // Loading a preset from this dropdown applies it to the active timeline
+  // (if any) AND populates the UI controls so user can edit + save.
+  document.getElementById('preset-select-edit').addEventListener('change', async (e) => {
+    const name = e.target.value;
+    if (!name) return;
+    document.getElementById('preset-select').value = name;
+    if (currentSeq) {
+      await loadPresetIntoCurrentSeq(name);
+    } else {
+      // No timeline → just load preset values into UI for editing/saving.
+      const p = await callLua('apply_preset', { name }).catch(() => null);
+      // apply_preset requires currentSeq; fall back to manual load.
+      const preset = await callLua('list_presets', {}).then(() => null); // noop
+      // Use a synthetic seq to drive UI controls.
+      currentSeq = { name: '__draft__', events: [],
+        viewport: {}, playback: {}, output: {}, chrome_offsets: {},
+        preset_name: name };
+      // Re-fetch preset content via apply_preset by temporarily allowing it.
+      const r = await callLua('apply_preset', { name }).catch(() => null);
+      if (r && r.sequence) currentSeq = r.sequence;
+      applySeqToUI(); updateActiveLabels();
+    }
+  });
+
   document.getElementById('btn-preset-new').addEventListener('click', async () => {
     const name = prompt('Preset name:');
     if (!name) return;
@@ -429,24 +483,21 @@
     try {
       await callLua('save_preset', { name: name.trim(), sequence: envelope });
       await refreshPresetList();
-      document.getElementById('preset-name').value = name.trim();
       document.getElementById('preset-select').value = name.trim();
-      // If a timeline IS loaded, link it.
+      document.getElementById('preset-select-edit').value = name.trim();
       if (currentSeq) {
         currentSeq.preset_name = name.trim();
         await callLua('save_preset_to_sequence', { sequence: currentSeq });
-        updateActiveLabels();
-      } else {
-        document.getElementById('preset-active').textContent = name.trim();
       }
+      updateActiveLabels();
       document.getElementById('last-output').textContent = 'created + saved preset: ' + name;
     } catch (e) { alert('preset new failed: ' + e.message); }
   });
 
   document.getElementById('btn-preset-save').addEventListener('click', async () => {
-    const name = document.getElementById('preset-name').value.trim() ||
-                 (currentSeq && currentSeq.preset_name);
-    if (!name) return alert('preset name required (pick or type one first)');
+    const name = document.getElementById('preset-select-edit').value
+              || (currentSeq && currentSeq.preset_name);
+    if (!name) return alert('Pick a preset to save into (or create a new one)');
     const envelope = buildPresetFromUI();
     await callLua('save_preset', { name, sequence: envelope });
     if (currentSeq) {
@@ -459,17 +510,17 @@
   });
 
   document.getElementById('btn-preset-duplicate').addEventListener('click', async () => {
-    const src = document.getElementById('preset-select').value
-             || document.getElementById('preset-name').value.trim();
-    if (!src) return alert('Pick a preset or type its name first');
-    const dest = prompt('New name for duplicate:', src + '-copy');
+    const src = document.getElementById('preset-select-edit').value
+             || (currentSeq && currentSeq.preset_name);
+    if (!src) return alert('Pick a preset to duplicate first');
+    const dest = prompt('New name for duplicate of "' + src + '":', src + '-copy');
     if (!dest) return;
     try {
       const r = await callLua('duplicate_preset', { src, dest: dest.trim() });
       if (r && r.error) return alert('duplicate failed: ' + r.error);
       await refreshPresetList();
-      document.getElementById('preset-name').value = dest;
-      document.getElementById('preset-select').value = dest;
+      document.getElementById('preset-select-edit').value = dest.trim();
+      document.getElementById('preset-select').value = dest.trim();
       document.getElementById('last-output').textContent = 'duplicated: ' + src + ' → ' + dest;
     } catch (e) { alert('duplicate failed: ' + e.message); }
   });
@@ -664,7 +715,7 @@
         applySeqToUI(); renderTimeline(); updateActiveLabels();
         if (currentSeq.preset_name) {
           document.getElementById('preset-select').value = currentSeq.preset_name;
-          document.getElementById('preset-name').value = currentSeq.preset_name;
+          document.getElementById('preset-select-edit').value = currentSeq.preset_name;
         }
       }
     } catch (_) {}
