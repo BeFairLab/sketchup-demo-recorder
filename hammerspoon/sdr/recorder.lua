@@ -23,6 +23,18 @@ local last_event_ts = nil
 local last_move_ts = 0
 local on_change_callback = nil
 
+-- Snapshot of the SketchUp window frame taken at record start. We store
+-- click coords RELATIVE to this anchor (evt.x_window / evt.y_window) so the
+-- sequence still replays correctly if the SU window moves between sessions.
+local su_anchor = nil
+
+local function su_window_frame()
+  local app = hs.application.find('SketchUp')
+  if not app then return nil end
+  local w = app:mainWindow() or app:focusedWindow() or app:allWindows()[1]
+  return w and w:frame() or nil
+end
+
 -- Keycodes that we MUST NOT record (our own hotkeys). Caller sets these.
 local hotkey_blocklist = {}
 
@@ -49,6 +61,13 @@ local function append_event(evt)
     evt.pause_before_ms = 0
   end
   last_event_ts = t
+
+  -- Mirror absolute click into window-relative coords. Replayer prefers
+  -- *_window when present + current SU window position.
+  if evt.x and evt.y and su_anchor then
+    evt.x_window = math.floor(evt.x - su_anchor.x + 0.5)
+    evt.y_window = math.floor(evt.y - su_anchor.y + 0.5)
+  end
 
   evt.id = string.format('evt_%04d', #current_seq.events + 1)
   table.insert(current_seq.events, evt)
@@ -157,6 +176,15 @@ function M.start(sequence, opts)
   last_event_ts = nil
   last_move_ts = 0
   on_change_callback = (opts or {}).on_change
+
+  -- Snapshot the SU window position so we can store window-relative coords.
+  su_anchor = su_window_frame()
+  if su_anchor and current_seq.viewport then
+    current_seq.viewport.window_position = {
+      x = su_anchor.x, y = su_anchor.y,
+      w = su_anchor.w, h = su_anchor.h
+    }
+  end
 
   -- Initial intro pause = 0; first real event timestamps from now.
   last_event_ts = now_ms()

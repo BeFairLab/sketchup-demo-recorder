@@ -9,6 +9,24 @@ local active_timer = nil
 local on_done_callback = nil
 local on_progress_callback = nil
 
+-- Snapshot SU window position at replay start; rewrite window-relative coords
+-- (x_window/y_window) onto current absolute screen position.
+local su_anchor = nil
+
+local function su_window_frame()
+  local app = hs.application.find('SketchUp')
+  if not app then return nil end
+  local w = app:mainWindow() or app:focusedWindow() or app:allWindows()[1]
+  return w and w:frame() or nil
+end
+
+local function resolved_xy(evt)
+  if evt.x_window ~= nil and evt.y_window ~= nil and su_anchor then
+    return su_anchor.x + evt.x_window, su_anchor.y + evt.y_window
+  end
+  return evt.x, evt.y
+end
+
 -- hs.eventtap.event APIs expect modifiers as an array of strings
 -- (e.g. {'cmd','shift'}). We store the same format on record.
 local function mods_array(mods)
@@ -26,20 +44,20 @@ local function post_event(evt)
              or evt.button == 'middle' and event_t.types.otherMouseDown
              or event_t.types.leftMouseDown
     drag_active = true
-    event_t.newMouseEvent(btn, { x = evt.x, y = evt.y }, mods_array(evt.modifiers)):post()
+    event_t.newMouseEvent(btn, { x = select(1, resolved_xy(evt)), y = select(2, resolved_xy(evt)) }, mods_array(evt.modifiers)):post()
 
   elseif evt.type == 'mouse_up' then
     local btn = evt.button == 'right' and event_t.types.rightMouseUp
              or evt.button == 'middle' and event_t.types.otherMouseUp
              or event_t.types.leftMouseUp
     drag_active = false
-    event_t.newMouseEvent(btn, { x = evt.x, y = evt.y }, mods_array(evt.modifiers)):post()
+    event_t.newMouseEvent(btn, { x = select(1, resolved_xy(evt)), y = select(2, resolved_xy(evt)) }, mods_array(evt.modifiers)):post()
 
   elseif evt.type == 'mouse_move' then
-    -- Warp cursor AND post a synthetic motion event so SU tools react.
-    hs.mouse.absolutePosition({ x = evt.x, y = evt.y })
+    local mx, my = resolved_xy(evt)
+    hs.mouse.absolutePosition({ x = mx, y = my })
     local mt = drag_active and event_t.types.leftMouseDragged or event_t.types.mouseMoved
-    event_t.newMouseEvent(mt, { x = evt.x, y = evt.y }, {}):post()
+    event_t.newMouseEvent(mt, { x = mx, y = my }, {}):post()
 
   elseif evt.type == 'key_down' then
     local mods = mods_array(evt.modifiers)
@@ -67,6 +85,11 @@ function M.play(sequence, opts)
   opts = opts or {}
   on_done_callback     = opts.on_done
   on_progress_callback = opts.on_progress
+
+  -- Snapshot SU window position at replay start so window-relative coords
+  -- map to today's screen position.
+  su_anchor = su_window_frame()
+  drag_active = false
 
   local lead = opts.lead_ms or 0
   local tail = opts.tail_ms or 0

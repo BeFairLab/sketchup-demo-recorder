@@ -42,32 +42,50 @@ function M.apply(viewport, chrome_offsets)
   if viewport.mode == 'viewport' then
     local result, err = bridge.resize_viewport(viewport.width, viewport.height)
     if err then return nil, 'companion: ' .. err end
-    hs.timer.usleep(150000) -- 150ms for SU to settle
+    hs.timer.usleep(150000)
     local frame = win:frame()
     local scale = backing_scale(frame)
 
-    -- IMPORTANT: SketchUp's view.vpwidth / view.vpheight return LOGICAL POINTS
-    -- on Retina (not raw pixels), even though Sketchup.resize_viewport takes
-    -- PIXEL arguments. So when companion reports {viewport: {w, h}} those are
-    -- already in logical points — do NOT divide by backing scale.
+    -- SU's view.vpwidth/vpheight are LOGICAL POINTS even though resize_viewport
+    -- takes pixels — do NOT divide by scale.
     local vp_pt_w = (result and result.viewport and result.viewport.w) or (viewport.width  / scale)
     local vp_pt_h = (result and result.viewport and result.viewport.h) or (viewport.height / scale)
 
-    -- Region anchored to bottom-of-window minus status bar.
+    -- Center the window on its screen so replay reproduces consistent
+    -- positions even if user manually moves SU between sessions.
+    local screen = win:screen() or hs.screen.primaryScreen()
+    local sf = screen:frame()
+    win:setTopLeft({
+      x = math.floor(sf.x + (sf.w - frame.w) / 2 + 0.5),
+      y = math.floor(sf.y + (sf.h - frame.h) / 2 + 0.5),
+    })
+    hs.timer.usleep(100000)
+    frame = win:frame()
+
+    -- Region = viewport rect anchored to bottom-of-window minus status bar.
     local region = {
       x = frame.x,
       y = frame.y + frame.h - STATUS_BAR_PT - vp_pt_h,
       w = vp_pt_w,
       h = vp_pt_h,
     }
-    return region
+    return region, nil, { x = frame.x, y = frame.y, w = frame.w, h = frame.h }
 
   elseif viewport.mode == 'window' then
     local cur = win:frame()
-    win:setFrame({ x = cur.x, y = cur.y, w = viewport.width, h = viewport.height })
+    -- Center while resizing.
+    local screen = win:screen() or hs.screen.primaryScreen()
+    local sf = screen:frame()
+    win:setFrame({
+      x = math.floor(sf.x + (sf.w - viewport.width) / 2 + 0.5),
+      y = math.floor(sf.y + (sf.h - viewport.height) / 2 + 0.5),
+      w = viewport.width, h = viewport.height,
+    })
     hs.timer.usleep(100000)
     local frame = win:frame()
-    return { x = frame.x, y = frame.y, w = frame.w, h = frame.h }
+    return { x = frame.x, y = frame.y, w = frame.w, h = frame.h },
+           nil,
+           { x = frame.x, y = frame.y, w = frame.w, h = frame.h }
   end
 
   return nil, 'unknown viewport mode: ' .. tostring(viewport.mode)

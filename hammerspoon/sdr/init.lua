@@ -93,12 +93,13 @@ local function register_handlers()
   ui.register('apply_viewport', function(payload)
     local seq = payload.sequence or current_seq
     if not seq then return { error = 'no sequence loaded' } end
-    local region, err = sizer.apply(seq.viewport, seq.chrome_offsets)
+    local region, err, win_frame = sizer.apply(seq.viewport, seq.chrome_offsets)
     if err then return { error = err } end
     seq.viewport.region = region
+    seq.viewport.window_position = win_frame -- for record-time anchor parity
     current_seq = seq
     if current_seq_name then store.save(current_seq_name, seq) end
-    return { region = region }
+    return { region = region, window_position = win_frame }
   end)
 
   ui.register('show_overlay', function(_)
