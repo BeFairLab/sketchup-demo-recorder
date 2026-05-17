@@ -50,6 +50,14 @@ function M.delete(name)
   return os.remove(path_for(name))
 end
 
+function M.rename(old_name, new_name)
+  return os.rename(path_for(old_name), path_for(new_name))
+end
+
+function M.path_for(name)
+  return path_for(name)
+end
+
 -- ─── Presets ───────────────────────────────────────────────────────
 -- A preset is { viewport, chrome_offsets, playback, output } — no events.
 
@@ -91,6 +99,20 @@ end
 
 function M.delete_preset(name)
   return os.remove(preset_path(name))
+end
+
+function M.rename_preset(old_name, new_name)
+  return os.rename(preset_path(old_name), preset_path(new_name))
+end
+
+function M.preset_path_for(name)
+  return preset_path(name)
+end
+
+function M.duplicate_preset(src_name, new_name)
+  local src = M.load_preset(src_name)
+  if not src then return false, 'source preset not found' end
+  return M.save_preset(new_name, src)
 end
 
 function M.new_sequence(name)

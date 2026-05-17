@@ -133,6 +133,17 @@ local function register_handlers()
 
   ui.register('load_sequence', function(payload)
     local seq = ensure_seq(payload.name)
+    -- Auto-apply the linked preset if one is referenced and exists.
+    if seq.preset_name then
+      local preset = store.load_preset(seq.preset_name)
+      if preset then
+        seq.viewport = preset.viewport
+        seq.chrome_offsets = preset.chrome_offsets
+        seq.playback = preset.playback
+        seq.output = preset.output
+      end
+    end
+    current_seq = seq
     return seq
   end)
 
@@ -192,11 +203,75 @@ local function register_handlers()
     if not current_seq then return { error = 'no active sequence' } end
     local preset = store.load_preset(payload.name)
     if not preset then return { error = 'preset not found' } end
+    local mismatch = nil
+    if current_seq.preset_name and current_seq.preset_name ~= payload.name then
+      mismatch = 'this timeline expects preset "' .. current_seq.preset_name ..
+                 '"; applying "' .. payload.name .. '" instead'
+    end
     current_seq.viewport = preset.viewport
     current_seq.chrome_offsets = preset.chrome_offsets
     current_seq.playback = preset.playback
     current_seq.output = preset.output
-    return { applied = true, sequence = current_seq }
+    current_seq.preset_name = payload.name
+    return { applied = true, sequence = current_seq, mismatch = mismatch }
+  end)
+
+  -- ── Management ─────────────────────────────────────────────────
+  ui.register('delete_sequence', function(payload)
+    if not payload or not payload.name then return { error = 'name required' } end
+    store.delete(payload.name)
+    if current_seq_name == payload.name then current_seq = nil; current_seq_name = nil end
+    return { deleted = true }
+  end)
+
+  ui.register('rename_sequence', function(payload)
+    if not payload or not payload.old or not payload.new then return { error = 'old + new required' } end
+    local ok, err = store.rename(payload.old, payload.new)
+    if not ok then return { error = tostring(err) } end
+    if current_seq_name == payload.old then
+      current_seq_name = payload.new
+      if current_seq then current_seq.name = payload.new end
+      hs.settings.set(SETTINGS_KEY_ACTIVE, payload.new)
+    end
+    return { renamed = true }
+  end)
+
+  ui.register('export_sequence', function(payload)
+    if not payload or not payload.name then return { error = 'name required' } end
+    local src = store.path_for(payload.name)
+    local dest = (payload.dest_dir or (os.getenv('HOME') .. '/Desktop')) ..
+                 '/' .. payload.name .. '.json'
+    hs.task.new('/bin/cp', function() end, { src, dest }):start()
+    return { exported = dest }
+  end)
+
+  ui.register('delete_preset', function(payload)
+    if not payload or not payload.name then return { error = 'name required' } end
+    store.delete_preset(payload.name)
+    return { deleted = true }
+  end)
+
+  ui.register('rename_preset', function(payload)
+    if not payload or not payload.old or not payload.new then return { error = 'old + new required' } end
+    local ok, err = store.rename_preset(payload.old, payload.new)
+    if not ok then return { error = tostring(err) } end
+    return { renamed = true }
+  end)
+
+  ui.register('duplicate_preset', function(payload)
+    if not payload or not payload.src or not payload.dest then return { error = 'src + dest required' } end
+    local ok, err = store.duplicate_preset(payload.src, payload.dest)
+    if not ok then return { error = tostring(err) } end
+    return { duplicated = true }
+  end)
+
+  ui.register('export_preset', function(payload)
+    if not payload or not payload.name then return { error = 'name required' } end
+    local src = store.preset_path_for(payload.name)
+    local dest = (payload.dest_dir or (os.getenv('HOME') .. '/Desktop')) ..
+                 '/preset-' .. payload.name .. '.json'
+    hs.task.new('/bin/cp', function() end, { src, dest }):start()
+    return { exported = dest }
   end)
 
   ui.register('new_sequence', function(payload)
