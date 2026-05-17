@@ -1,4 +1,5 @@
 .DS_Store
+sequences/nil.json
 *.log
 *.tmp
 node_modules/

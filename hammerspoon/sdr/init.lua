@@ -36,6 +36,9 @@ end
 local SETTINGS_KEY_ACTIVE = 'sdr.active_sequence_name'
 
 local function ensure_seq(name)
+  if not name or name == '' or name == 'nil' then
+    error('ensure_seq: invalid name ' .. tostring(name))
+  end
   current_seq_name = name
   hs.settings.set(SETTINGS_KEY_ACTIVE, name)
   local seq = store.load(name)
