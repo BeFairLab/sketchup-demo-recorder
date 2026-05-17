@@ -63,9 +63,12 @@ function M.apply(viewport, chrome_offsets)
     frame = win:frame()
 
     -- Region = viewport rect anchored to bottom-of-window minus status bar.
+    -- Apply overlay_shift so capture region tracks the same nudge as the
+    -- preview overlay (they're locked together).
+    local shift = viewport.overlay_shift or { dx = 0, dy = 0 }
     local region = {
-      x = frame.x,
-      y = frame.y + frame.h - STATUS_BAR_PT - vp_pt_h,
+      x = frame.x + (shift.dx or 0),
+      y = frame.y + frame.h - STATUS_BAR_PT - vp_pt_h + (shift.dy or 0),
       w = vp_pt_w,
       h = vp_pt_h,
     }

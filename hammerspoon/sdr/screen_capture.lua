@@ -26,6 +26,35 @@ end
 -- output_path: full path to write the .mov file.
 -- seconds: fixed recording duration.
 -- on_done: optional callback(exitCode, file_path)
+-- Try ffmpeg avfoundation as a fallback when screencapture returns 0-byte file.
+local function start_ffmpeg_fallback(region, output_path, seconds, display_index, on_done)
+  -- We need the display index in ffmpeg's avfoundation numbering. macOS
+  -- screens enumerate AFTER cameras; we use the helper -list_devices to find
+  -- it but for speed just try "Capture screen <index-1>" — works in most cases.
+  local av_idx = 3 + (display_index or 1) -- 0..N cameras then "Capture screen N"
+  local args = {
+    '-y', '-loglevel', 'warning',
+    '-f', 'avfoundation',
+    '-capture_cursor', '0',
+    '-framerate', '30',
+    '-i', tostring(av_idx) .. ':none',
+    '-t', tostring(seconds),
+    '-vf', string.format('crop=%d:%d:%d:%d', region.w * 2, region.h * 2, region.x * 2, region.y * 2),
+    '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-crf', '20', '-preset', 'veryfast',
+    '-movflags', '+faststart',
+    output_path,
+  }
+  hs.printf('ffmpeg fallback START args=%s', hs.inspect(args))
+  local task = hs.task.new('/opt/homebrew/bin/ffmpeg', function(exitCode, stdOut, stdErr)
+    local size = 0
+    local f = io.open(output_path, 'r')
+    if f then f:seek('end'); size = f:seek() or 0; f:close() end
+    hs.printf('ffmpeg fallback exit=%s size=%d stderr=%q', tostring(exitCode), size, tostring(stdErr or ''))
+    on_done(exitCode, output_path, size, stdErr)
+  end, args)
+  task:start()
+end
+
 function M.start(region, output_path, seconds, on_done)
   if current_task then return false, 'recording already in progress' end
   if not region or region.w <= 0 or region.h <= 0 then
@@ -93,6 +122,16 @@ function M.start(region, output_path, seconds, on_done)
     if f then f:seek('end'); size = f:seek() or 0; f:close() end
     hs.printf('screencapture exit=%s size=%d  stderr=%q  stdout=%q  path=%s',
       tostring(exitCode), size, tostring(stdErr or ''), tostring(stdOut or ''), final_path)
+
+    -- Fallback to ffmpeg if screencapture produced an empty file.
+    if size == 0 and hs.fs.attributes('/opt/homebrew/bin/ffmpeg') then
+      hs.printf('screencapture wrote 0 bytes → trying ffmpeg avfoundation fallback')
+      start_ffmpeg_fallback(region, final_path, seconds, display_index, function(ec2, p, sz, err)
+        if on_done then on_done(ec2, p, sz, err) end
+      end)
+      return
+    end
+
     if on_done then on_done(exitCode, final_path, size, stdErr) end
   end, args)
 

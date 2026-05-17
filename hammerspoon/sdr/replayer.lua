@@ -28,12 +28,12 @@ local keystroke_anchor = nil   -- {x, y} screen coords for keystroke label
 
 local function ease(t, kind)
   if kind == 'linear' then return t
-  elseif kind == 'in'    then return t * t * t
-  elseif kind == 'out'   then local u = 1 - t; return 1 - u * u * u
-  else -- in_out
-    if t < 0.5 then return 4 * t * t * t end
+  elseif kind == 'in'    then return t * t * t           -- cubic in
+  elseif kind == 'out'   then local u = 1 - t; return 1 - u * u * u  -- cubic out
+  else -- in_out: quintic for a notably smoother S-curve
+    if t < 0.5 then return 16 * t * t * t * t * t end
     local u = -2 * t + 2
-    return 1 - u * u * u / 2
+    return 1 - (u * u * u * u * u) / 2
   end
 end
 
@@ -204,19 +204,33 @@ function M.play(sequence, opts)
   local tail = opts.tail_ms or 0
   local i = 1
 
+  local mod_sym = { cmd = '⌘', shift = '⇧', alt = '⌥', ctrl = '⌃', fn = 'fn' }
+
+  local function format_combo(mods, key_label)
+    local parts = {}
+    for _, m in ipairs(mods or {}) do table.insert(parts, mod_sym[m] or m) end
+    if key_label and #key_label > 0 then table.insert(parts, key_label) end
+    return table.concat(parts, ' ')
+  end
+
   local function trigger_click_effect(evt)
     if show_click_effects and evt.type == 'mouse_down' then
       local x, y = resolved_xy(evt)
       effects.click_dot(x, y)
     end
-    if show_keystrokes and evt.type == 'key_down' and keystroke_anchor then
+    if not show_keystrokes or not keystroke_anchor then return end
+
+    if evt.type == 'key_down' then
+      local label = us_map.label(evt.keycode, evt.key)
+      effects.show_keystroke(format_combo(evt.modifiers, label),
+        keystroke_anchor.x, keystroke_anchor.y)
+    elseif evt.type == 'mouse_down' then
+      -- Show modifier-only label if user is clicking with mods held.
       local mods = evt.modifiers or {}
-      local sym = { cmd = '⌘', shift = '⇧', alt = '⌥', ctrl = '⌃', fn = 'fn' }
-      local parts = {}
-      for _, m in ipairs(mods) do table.insert(parts, sym[m] or m) end
-      -- Always render English label regardless of recording-time keyboard layout.
-      table.insert(parts, us_map.label(evt.keycode, evt.key))
-      effects.show_keystroke(table.concat(parts, ' '), keystroke_anchor.x, keystroke_anchor.y)
+      if #mods > 0 then
+        effects.show_keystroke(format_combo(mods, 'Click'),
+          keystroke_anchor.x, keystroke_anchor.y)
+      end
     end
   end
 

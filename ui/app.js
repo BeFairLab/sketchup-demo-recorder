@@ -386,14 +386,21 @@
   });
 
   document.getElementById('btn-preset-duplicate').addEventListener('click', async () => {
-    const src = document.getElementById('preset-select').value;
-    if (!src) return alert('select a preset to duplicate');
+    const src = document.getElementById('preset-select').value
+             || document.getElementById('preset-name').value.trim();
+    if (!src) return alert('Pick a preset in the dropdown or type its name first');
     const dest = prompt('New name for duplicate:', src + '-copy');
     if (!dest) return;
-    const r = await callLua('duplicate_preset', { src, dest });
-    if (r.error) return alert(r.error);
-    await refreshPresetList();
-    document.getElementById('last-output').textContent = 'duplicated: ' + src + ' → ' + dest;
+    try {
+      const r = await callLua('duplicate_preset', { src, dest });
+      if (r && r.error) return alert('duplicate failed: ' + r.error);
+      await refreshPresetList();
+      document.getElementById('preset-name').value = dest;
+      document.getElementById('preset-select').value = dest;
+      document.getElementById('last-output').textContent = 'duplicated: ' + src + ' → ' + dest;
+    } catch (e) {
+      alert('duplicate failed: ' + e.message);
+    }
   });
 
   document.getElementById('btn-preset-apply').addEventListener('click', () =>
@@ -427,8 +434,24 @@
   document.getElementById('btn-hide-overlay').addEventListener('click', () => callLua('hide_overlay', {}));
 
   ['overlay-shift-x', 'overlay-shift-y'].forEach((id) => {
-    document.getElementById(id).addEventListener('change', () => {
+    document.getElementById(id).addEventListener('change', async () => {
       readShiftFromUI();
+      // Recompute region with the new shift (so capture uses it too) then
+      // re-show overlay at the same place.
+      if (currentSeq && currentSeq.viewport && currentSeq.viewport.region) {
+        const r = currentSeq.viewport.region;
+        const sh = currentSeq.viewport.overlay_shift || { dx: 0, dy: 0 };
+        // Shift relative to baseline: store baseline once if absent.
+        if (!currentSeq.viewport._region_base) {
+          currentSeq.viewport._region_base = { x: r.x - sh.dx, y: r.y - sh.dy, w: r.w, h: r.h };
+        }
+        const base = currentSeq.viewport._region_base;
+        currentSeq.viewport.region = {
+          x: base.x + sh.dx, y: base.y + sh.dy, w: base.w, h: base.h,
+        };
+        const rr = currentSeq.viewport.region;
+        document.getElementById('vp-region').textContent = `region: ${rr.x},${rr.y} ${rr.w}×${rr.h}`;
+      }
       callLua('show_overlay', { shift: currentSeq && currentSeq.viewport.overlay_shift }).catch(() => {});
     });
   });
