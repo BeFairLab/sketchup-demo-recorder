@@ -6,6 +6,7 @@ local eventtap = require('hs.eventtap')
 local event_t  = eventtap.event
 local kc       = hs.keycodes.map
 local effects  = require('sdr.effects')
+local us_map   = require('sdr.us_keymap')
 
 local M = {}
 
@@ -121,6 +122,8 @@ end
 
 -- Animate cursor from last_cursor to (tx, ty) over distance/auto_path_pps
 -- seconds, then call on_done. ~60 fps. Easing applied via ease(t).
+-- If drag_active is true, posts leftMouseDragged so any held button stays
+-- held — required for click+drag+release selection in SU.
 local function animate_to(tx, ty, on_done)
   if not last_cursor then
     hs.mouse.absolutePosition({ x = tx, y = ty })
@@ -145,8 +148,8 @@ local function animate_to(tx, ty, on_done)
     local t = ease(k / steps, auto_path_easing)
     local x = sx + dx * t
     local y = sy + dy * t
-    hs.mouse.absolutePosition({ x = x, y = y })
-    event_t.newMouseEvent(event_t.types.mouseMoved, { x = x, y = y }, {}):post()
+    local mt = drag_active and event_t.types.leftMouseDragged or event_t.types.mouseMoved
+    event_t.newMouseEvent(mt, { x = x, y = y }, {}):post()
     if k < steps then
       hs.timer.doAfter(step_dur, step)
     else
@@ -211,8 +214,8 @@ function M.play(sequence, opts)
       local sym = { cmd = '⌘', shift = '⇧', alt = '⌥', ctrl = '⌃', fn = 'fn' }
       local parts = {}
       for _, m in ipairs(mods) do table.insert(parts, sym[m] or m) end
-      local key = (evt.key or ''):upper()
-      table.insert(parts, key)
+      -- Always render English label regardless of recording-time keyboard layout.
+      table.insert(parts, us_map.label(evt.keycode, evt.key))
       effects.show_keystroke(table.concat(parts, ' '), keystroke_anchor.x, keystroke_anchor.y)
     end
   end

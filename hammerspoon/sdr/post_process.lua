@@ -29,9 +29,9 @@ end
 --   'universal_2160' → source 2160×2160 px; YouTube center 1920×1080, Reels 1080×1920
 --   'universal_2880' → source 2880×2880 px; YouTube center 2880×1620, Reels 1620×2880
 --
--- Pre-condition: input is a .mov from screencapture (raw pixels matching the
--- universal preset). We let ffmpeg crop in pixel space.
-function M.split_universal(in_path, preset, on_done)
+-- opts.rescale = { w, h } → after crop, scale each variant to W×H.
+function M.split_universal(in_path, preset, opts, on_done)
+  opts = opts or {}
   local crops = {}
   if preset == 'universal_2160' then
     crops = {
@@ -51,11 +51,19 @@ function M.split_universal(in_path, preset, on_done)
   local outputs = {}
   local pending = #crops
   for _, c in ipairs(crops) do
-    local out_path = suffix_path(in_path, '_' .. c.name, 'mp4')
+    local vf = c.filter
+    if opts.rescale and opts.rescale.w and opts.rescale.h then
+      vf = vf .. string.format(',scale=%d:%d:flags=lanczos', opts.rescale.w, opts.rescale.h)
+    end
+    local suffix = '_' .. c.name
+    if opts.rescale and opts.rescale.w and opts.rescale.h then
+      suffix = suffix .. string.format('_%dx%d', opts.rescale.w, opts.rescale.h)
+    end
+    local out_path = suffix_path(in_path, suffix, 'mp4')
     ffmpeg_run({
       '-y', '-loglevel', 'error',
       '-i', in_path,
-      '-vf', c.filter,
+      '-vf', vf,
       '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-crf', '18', '-preset', 'slow',
       '-movflags', '+faststart',
       out_path,

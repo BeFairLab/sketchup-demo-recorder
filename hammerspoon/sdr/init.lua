@@ -144,6 +144,61 @@ local function register_handlers()
     return { saved = true }
   end)
 
+  -- Save ONLY the events (and minimal meta) — preserves preset settings on disk.
+  ui.register('save_timeline', function(payload)
+    local seq = payload.sequence
+    if not seq then return { error = 'no sequence' } end
+    local existing = store.load(seq.name) or store.new_sequence(seq.name)
+    existing.events = seq.events or {}
+    existing.name = seq.name
+    store.save(seq.name, existing)
+    current_seq = existing
+    current_seq_name = seq.name
+    hs.settings.set(SETTINGS_KEY_ACTIVE, seq.name)
+    return { saved = true }
+  end)
+
+  -- Save ONLY preset settings (viewport+playback+output) — preserves events.
+  ui.register('save_preset_to_sequence', function(payload)
+    local seq = payload.sequence
+    if not seq then return { error = 'no sequence' } end
+    local existing = store.load(seq.name) or store.new_sequence(seq.name)
+    existing.viewport = seq.viewport
+    existing.chrome_offsets = seq.chrome_offsets
+    existing.playback = seq.playback
+    existing.output = seq.output
+    store.save(seq.name, existing)
+    current_seq = existing
+    current_seq_name = seq.name
+    return { saved = true }
+  end)
+
+  -- Save preset settings as standalone reusable template.
+  ui.register('save_preset', function(payload)
+    if not payload or not payload.name or not payload.sequence then
+      return { error = 'preset name + sequence required' }
+    end
+    local ok, err = store.save_preset(payload.name, payload.sequence)
+    if not ok then return { error = err } end
+    return { saved = true, name = payload.name }
+  end)
+
+  ui.register('list_presets', function(_)
+    return store.list_presets()
+  end)
+
+  ui.register('apply_preset', function(payload)
+    if not payload or not payload.name then return { error = 'preset name required' } end
+    if not current_seq then return { error = 'no active sequence' } end
+    local preset = store.load_preset(payload.name)
+    if not preset then return { error = 'preset not found' } end
+    current_seq.viewport = preset.viewport
+    current_seq.chrome_offsets = preset.chrome_offsets
+    current_seq.playback = preset.playback
+    current_seq.output = preset.output
+    return { applied = true, sequence = current_seq }
+  end)
+
   ui.register('new_sequence', function(payload)
     return ensure_seq(payload.name)
   end)
@@ -208,17 +263,17 @@ local function register_handlers()
   ui.register('play', function(payload)
     if not current_seq then return { error = 'no sequence' } end
     local seq = payload.sequence or current_seq
-    -- Inject computed keystroke anchor into playback.
     seq.playback = seq.playback or {}
     seq.playback.keystroke_anchor = keystroke_anchor_for(seq.viewport)
-    -- Bring SketchUp to foreground BEFORE replay — otherwise events go to UI.
     local app = hs.application.find('SketchUp')
     if app then app:activate() end
     set_status('replaying')
-    local lead = payload.lead_ms or 800
+    -- Playback-defined delays override caller defaults.
+    local lead = seq.playback.pre_delay_ms or payload.lead_ms or 800
+    local tail = seq.playback.post_delay_ms or payload.tail_ms or 0
     replayer.play(seq, {
       lead_ms = lead,
-      tail_ms = payload.tail_ms or 0,
+      tail_ms = tail,
       on_progress = function(i, n, e)
         ui.push('replay_progress', { i = i, n = n, type = e.type })
       end,
@@ -237,8 +292,10 @@ local function register_handlers()
       return { error = 'apply viewport first' }
     end
 
-    local lead = payload.lead_ms or 1000
-    local tail = payload.tail_ms or 1000
+    local pb_pre  = (seq.playback or {}).pre_delay_ms
+    local pb_post = (seq.playback or {}).post_delay_ms
+    local lead = pb_pre  or payload.lead_ms or 1000
+    local tail = pb_post or payload.tail_ms or 1000
     local out_dir = payload.out_dir or (os.getenv('HOME') .. '/Desktop')
     hs.fs.mkdir(out_dir)
     local out_path = string.format('%s/%s_%s.mov', out_dir, seq.name, os.date('%Y%m%d_%H%M%S'))
@@ -275,17 +332,22 @@ local function register_handlers()
       local out = seq.output or {}
       local preset = seq.viewport and seq.viewport.preset
 
+      local rescale_arg = nil
+      if out.rescale and out.rescale_w and out.rescale_h then
+        rescale_arg = { w = out.rescale_w, h = out.rescale_h }
+      end
+
       if out.auto_crop_universal and (preset == 'universal_2160' or preset == 'universal_2880') then
-        set_status('capturing') -- keep purple-ish status during post
-        post.split_universal(path, preset, function(_, _, outputs)
+        set_status('capturing')
+        post.split_universal(path, preset, { rescale = rescale_arg }, function(_, _, outputs)
           set_status('idle')
           ui.push('capture_done', { path = path, size = size, post = outputs })
           local msg = path .. '  +'
           for _, o in ipairs(outputs or {}) do msg = msg .. ' ' .. o.name end
           notify('SDR capture + crops', msg)
         end)
-      elseif out.rescale and out.rescale_w and out.rescale_h then
-        post.rescale(path, { w = out.rescale_w, h = out.rescale_h }, function(ok2, out_path)
+      elseif rescale_arg then
+        post.rescale(path, rescale_arg, function(ok2, out_path)
           set_status('idle')
           ui.push('capture_done', { path = path, size = size, scaled = ok2 and out_path or nil })
           notify('SDR capture + scaled', (ok2 and out_path) or path)

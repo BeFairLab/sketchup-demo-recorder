@@ -31,6 +31,36 @@ function M.start(region, output_path, seconds, on_done)
   if not region or region.w <= 0 or region.h <= 0 then
     return false, 'invalid region ' .. hs.inspect(region)
   end
+
+  -- Clamp region to the display it sits on. screencapture silently writes a
+  -- 0-byte file if the region extends past display bounds — fatal for
+  -- portrait Reels captures on small displays.
+  local cx = region.x + region.w / 2
+  local cy = region.y + region.h / 2
+  local screen = nil
+  for _, s in ipairs(hs.screen.allScreens()) do
+    local f = s:frame()
+    if cx >= f.x and cx < f.x + f.w and cy >= f.y and cy < f.y + f.h then
+      screen = s; break
+    end
+  end
+  if screen then
+    local sf = screen:frame()
+    local x = math.max(sf.x, region.x)
+    local y = math.max(sf.y, region.y)
+    local w = math.min(region.w, sf.x + sf.w - x)
+    local h = math.min(region.h, sf.y + sf.h - y)
+    if x ~= region.x or y ~= region.y or w ~= region.w or h ~= region.h then
+      hs.printf('screencapture: region clamped %d,%d %dx%d → %d,%d %dx%d',
+        region.x, region.y, region.w, region.h, x, y, w, h)
+      region = { x = x, y = y, w = w, h = h }
+    end
+  end
+
+  -- Round to integers (screencapture parses int).
+  region = { x = math.floor(region.x + 0.5), y = math.floor(region.y + 0.5),
+             w = math.floor(region.w + 0.5), h = math.floor(region.h + 0.5) }
+
   seconds = math.max(2, math.floor(seconds + 0.5))
 
   -- Ensure parent dir exists.

@@ -22,8 +22,17 @@
       <input id="seq-name" placeholder="new-sequence-name">
       <button id="btn-new">New</button>
       <button id="btn-load">Load</button>
-      <button id="btn-save">Save</button>
+      <button id="btn-save-timeline">Save timeline</button>
+      <button id="btn-save-preset-to-seq">Save preset → sequence</button>
       <button id="btn-ping">Ping Companion</button>
+    </div>
+    <div class="seq-controls">
+      <label>Preset library
+        <select id="preset-select"></select>
+      </label>
+      <input id="preset-name" placeholder="preset-name">
+      <button id="btn-save-preset">Save as preset</button>
+      <button id="btn-apply-preset">Apply preset to current</button>
     </div>
   </section>
 
@@ -93,7 +102,17 @@
     </div>
     <div class="row">
       <label><input type="checkbox" id="click-effects"> Show click circles</label>
-      <label><input type="checkbox" id="show-keystrokes"> Show keystrokes overlay</label>
+      <label><input type="checkbox" id="show-keystrokes"> Show keystrokes (English labels)</label>
+    </div>
+    <div class="row">
+      <label>Pre-delay
+        <input type="number" id="pre-delay-ms" value="1000" min="0" step="100" style="width:90px">
+        <span class="muted">ms before first event</span>
+      </label>
+      <label>Post-delay
+        <input type="number" id="post-delay-ms" value="1000" min="0" step="100" style="width:90px">
+        <span class="muted">ms after last event</span>
+      </label>
     </div>
     <div class="row">
       <button id="btn-apply-auto">Apply auto-path to timeline</button>

@@ -105,6 +105,8 @@
     document.getElementById('auto-path-easing').value = pb.auto_path_easing || 'in_out';
     document.getElementById('click-effects').checked = pb.show_click_effects === true;
     document.getElementById('show-keystrokes').checked = pb.show_keystrokes === true;
+    document.getElementById('pre-delay-ms').value  = (pb.pre_delay_ms  != null) ? pb.pre_delay_ms  : 1000;
+    document.getElementById('post-delay-ms').value = (pb.post_delay_ms != null) ? pb.post_delay_ms : 1000;
 
     const sh = (currentSeq.viewport && currentSeq.viewport.overlay_shift) || { dx: 0, dy: 0 };
     document.getElementById('overlay-shift-x').value = sh.dx || 0;
@@ -125,6 +127,8 @@
     currentSeq.playback.auto_path_easing   = document.getElementById('auto-path-easing').value || 'in_out';
     currentSeq.playback.show_click_effects = document.getElementById('click-effects').checked;
     currentSeq.playback.show_keystrokes    = document.getElementById('show-keystrokes').checked;
+    currentSeq.playback.pre_delay_ms       = parseInt(document.getElementById('pre-delay-ms').value, 10);
+    currentSeq.playback.post_delay_ms      = parseInt(document.getElementById('post-delay-ms').value, 10);
   }
 
   function readShiftFromUI() {
@@ -312,11 +316,49 @@
     if (name) loadSequence(name);
   });
 
-  document.getElementById('btn-save').addEventListener('click', async () => {
+  document.getElementById('btn-save-timeline').addEventListener('click', async () => {
+    if (!currentSeq) return;
+    await callLua('save_timeline', { sequence: currentSeq });
+    document.getElementById('last-output').textContent = 'saved timeline (events) for ' + currentSeq.name;
+  });
+
+  document.getElementById('btn-save-preset-to-seq').addEventListener('click', async () => {
     if (!currentSeq) return;
     readAllFromUI();
-    await callLua('save_sequence', { sequence: currentSeq });
-    document.getElementById('last-output').textContent = 'saved ' + currentSeq.name;
+    await callLua('save_preset_to_sequence', { sequence: currentSeq });
+    document.getElementById('last-output').textContent = 'saved preset settings to ' + currentSeq.name;
+  });
+
+  async function refreshPresetList() {
+    const list = await callLua('list_presets', {});
+    const sel = document.getElementById('preset-select');
+    sel.innerHTML = '<option value="">— choose preset —</option>';
+    (list || []).forEach((n) => {
+      const o = document.createElement('option'); o.value = n; o.textContent = n;
+      sel.appendChild(o);
+    });
+  }
+
+  document.getElementById('btn-save-preset').addEventListener('click', async () => {
+    if (!currentSeq) return;
+    const name = document.getElementById('preset-name').value.trim();
+    if (!name) return alert('preset name required');
+    readAllFromUI();
+    await callLua('save_preset', { name, sequence: currentSeq });
+    await refreshPresetList();
+    document.getElementById('last-output').textContent = 'preset saved: ' + name;
+  });
+
+  document.getElementById('btn-apply-preset').addEventListener('click', async () => {
+    if (!currentSeq) return;
+    const name = document.getElementById('preset-select').value || document.getElementById('preset-name').value.trim();
+    if (!name) return alert('pick a preset');
+    const r = await callLua('apply_preset', { name });
+    if (r.error) return alert(r.error);
+    currentSeq = r.sequence;
+    applySeqToUI();
+    renderTimeline();
+    document.getElementById('last-output').textContent = 'preset applied: ' + name;
   });
 
   document.getElementById('btn-ping').addEventListener('click', async () => {
@@ -370,6 +412,8 @@
   });
   document.getElementById('auto-path-easing').addEventListener('change', readPlaybackFromUI);
   document.getElementById('show-keystrokes').addEventListener('change', readPlaybackFromUI);
+  document.getElementById('pre-delay-ms').addEventListener('change', readPlaybackFromUI);
+  document.getElementById('post-delay-ms').addEventListener('change', readPlaybackFromUI);
 
   ['overlay-shift-x', 'overlay-shift-y'].forEach((id) => {
     document.getElementById(id).addEventListener('change', () => {
@@ -446,6 +490,7 @@
   // ─── Init ──────────────────────────────────────────────────────
   (async () => {
     await refreshSequenceList();
+    await refreshPresetList();
     // Auto-load the persisted active sequence (set on the Lua side).
     try {
       const active = await callLua('get_active_sequence', {});
