@@ -91,7 +91,8 @@ function M.start(region, output_path, seconds, on_done)
     local size = 0
     local f = io.open(final_path, 'r')
     if f then f:seek('end'); size = f:seek() or 0; f:close() end
-    hs.printf('screencapture exit=%s size=%d path=%s', tostring(exitCode), size, final_path)
+    hs.printf('screencapture exit=%s size=%d  stderr=%q  stdout=%q  path=%s',
+      tostring(exitCode), size, tostring(stdErr or ''), tostring(stdOut or ''), final_path)
     if on_done then on_done(exitCode, final_path, size, stdErr) end
   end, args)
 
@@ -102,8 +103,9 @@ function M.start(region, output_path, seconds, on_done)
     return false, 'failed to start screencapture'
   end
 
-  hs.printf('screencapture started: %ds → %s   region=%d,%d %dx%d   display=%d',
-    seconds, path, region.x, region.y, region.w, region.h, display_index)
+  hs.printf('screencapture START args=%s', hs.inspect(args))
+  hs.printf('screencapture region=%d,%d %dx%d   display=%d   duration=%ds   out=%s',
+    region.x, region.y, region.w, region.h, display_index, seconds, path)
   return true, path
 end
 

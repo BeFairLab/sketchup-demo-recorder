@@ -238,16 +238,18 @@ local function register_handlers()
     return { result = r, error = e }
   end)
 
-  ui.register('start_record', function(_)
+  ui.register('start_record', function(payload)
     if not current_seq then return { error = 'load a sequence first' } end
-    current_seq.events = {}
+    local append = payload and payload.append == true
+    if not append then current_seq.events = {} end
     set_status('recording')
     recorder.start(current_seq, {
+      append = append,
       on_change = function(n)
         ui.push('event_count', { count = n })
       end
     })
-    return { recording = true }
+    return { recording = true, append = append }
   end)
 
   ui.register('stop_record', function(_)
@@ -336,10 +338,19 @@ local function register_handlers()
       if out.rescale and out.rescale_w and out.rescale_h then
         rescale_arg = { w = out.rescale_w, h = out.rescale_h }
       end
+      local rs_yt = (out.rescale_youtube_w and out.rescale_youtube_h)
+        and { w = out.rescale_youtube_w, h = out.rescale_youtube_h }
+        or rescale_arg
+      local rs_rl = (out.rescale_reels_w and out.rescale_reels_h)
+        and { w = out.rescale_reels_w, h = out.rescale_reels_h }
+        or rescale_arg
 
       if out.auto_crop_universal and (preset == 'universal_2160' or preset == 'universal_2880') then
         set_status('capturing')
-        post.split_universal(path, preset, { rescale = rescale_arg }, function(_, _, outputs)
+        post.split_universal(path, preset, {
+          rescale_youtube = rs_yt,
+          rescale_reels   = rs_rl,
+        }, function(_, _, outputs)
           set_status('idle')
           ui.push('capture_done', { path = path, size = size, post = outputs })
           local msg = path .. '  +'
@@ -391,27 +402,29 @@ end
 local hotkeys = {}
 
 local function bind_hotkeys()
-  -- ⌃⌥⌘R — toggle record
-  table.insert(hotkeys, hs.hotkey.bind({'ctrl', 'alt', 'cmd'}, 'r', function()
-    if recorder.is_recording() then
-      local _, seq = recorder.stop()
-      set_status('idle')
-      if seq and current_seq_name then store.save(current_seq_name, seq) end
-      notify('SDR', 'Recording stopped (' .. (seq and #seq.events or 0) .. ' events)')
-      ui.push('sequence_updated', seq)
-    else
-      if not current_seq then
-        notify('SDR', 'Load a sequence first')
-        return
+  -- ⌃⌥⌘R — fresh record (toggle). ⌃⌥⌘E — continue (append) record.
+  local function bind_record(modes_extend)
+    return function()
+      if recorder.is_recording() then
+        local _, seq = recorder.stop()
+        set_status('idle')
+        if seq and current_seq_name then store.save(current_seq_name, seq) end
+        notify('SDR', 'Recording stopped (' .. (seq and #seq.events or 0) .. ' events)')
+        ui.push('sequence_updated', seq)
+      else
+        if not current_seq then notify('SDR', 'Load a sequence first'); return end
+        if not modes_extend then current_seq.events = {} end
+        recorder.start(current_seq, {
+          append = modes_extend,
+          on_change = function(n) ui.push('event_count', { count = n }) end
+        })
+        set_status('recording')
+        notify('SDR', modes_extend and 'Continuing recording' or 'Recording started')
       end
-      current_seq.events = {}
-      recorder.start(current_seq, {
-        on_change = function(n) ui.push('event_count', { count = n }) end
-      })
-      set_status('recording')
-      notify('SDR', 'Recording started')
     end
-  end))
+  end
+  table.insert(hotkeys, hs.hotkey.bind({'ctrl', 'alt', 'cmd'}, 'r', bind_record(false)))
+  table.insert(hotkeys, hs.hotkey.bind({'ctrl', 'alt', 'cmd'}, 'e', bind_record(true)))
 
   -- ⌃⌥⌘V — toggle window
   table.insert(hotkeys, hs.hotkey.bind({'ctrl', 'alt', 'cmd'}, 'v', function()
@@ -427,9 +440,9 @@ local function bind_hotkeys()
     set_status('replaying')
   end))
 
-  -- Tell recorder to ignore our hotkey combos.
   recorder.set_hotkey_blocklist({
     { keycode = hs.keycodes.map['r'], cmd = true, alt = true, ctrl = true },
+    { keycode = hs.keycodes.map['e'], cmd = true, alt = true, ctrl = true },
     { keycode = hs.keycodes.map['v'], cmd = true, alt = true, ctrl = true },
     { keycode = hs.keycodes.map['p'], cmd = true, alt = true, ctrl = true },
   })

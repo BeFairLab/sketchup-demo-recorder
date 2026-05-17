@@ -172,12 +172,18 @@ end
 
 function M.start(sequence, opts)
   if active_tap then return false, 'already recording' end
+  opts = opts or {}
   current_seq = sequence
   last_event_ts = nil
   last_move_ts = 0
-  on_change_callback = (opts or {}).on_change
+  on_change_callback = opts.on_change
 
-  -- Snapshot the SU window position so we can store window-relative coords.
+  -- Default: fresh recording. Set opts.append=true to keep existing events
+  -- and continue adding (first new event will have pause_before from now).
+  if not opts.append then
+    current_seq.events = {}
+  end
+
   su_anchor = su_window_frame()
   if su_anchor and current_seq.viewport then
     current_seq.viewport.window_position = {
@@ -186,8 +192,13 @@ function M.start(sequence, opts)
     }
   end
 
-  -- Initial intro pause = 0; first real event timestamps from now.
-  last_event_ts = now_ms()
+  -- For append mode, give the first new event a 500ms grace pause so it's
+  -- not 0 (which would mean instantaneous after the last).
+  if opts.append and #current_seq.events > 0 then
+    last_event_ts = now_ms() - 500
+  else
+    last_event_ts = now_ms()
+  end
 
   active_tap = eventtap.new({
     types.leftMouseDown, types.leftMouseUp,

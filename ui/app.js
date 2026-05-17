@@ -117,6 +117,10 @@
     document.getElementById('auto-rescale').checked = out.rescale === true;
     document.getElementById('rescale-w').value = out.rescale_w || 1920;
     document.getElementById('rescale-h').value = out.rescale_h || 1080;
+    document.getElementById('rescale-yt-w').value = out.rescale_youtube_w || 1920;
+    document.getElementById('rescale-yt-h').value = out.rescale_youtube_h || 1080;
+    document.getElementById('rescale-rl-w').value = out.rescale_reels_w || 1080;
+    document.getElementById('rescale-rl-h').value = out.rescale_reels_h || 1920;
   }
 
   function readPlaybackFromUI() {
@@ -147,6 +151,10 @@
     currentSeq.output.rescale   = document.getElementById('auto-rescale').checked;
     currentSeq.output.rescale_w = parseInt(document.getElementById('rescale-w').value, 10) || 1920;
     currentSeq.output.rescale_h = parseInt(document.getElementById('rescale-h').value, 10) || 1080;
+    currentSeq.output.rescale_youtube_w = parseInt(document.getElementById('rescale-yt-w').value, 10) || 1920;
+    currentSeq.output.rescale_youtube_h = parseInt(document.getElementById('rescale-yt-h').value, 10) || 1080;
+    currentSeq.output.rescale_reels_w   = parseInt(document.getElementById('rescale-rl-w').value, 10) || 1080;
+    currentSeq.output.rescale_reels_h   = parseInt(document.getElementById('rescale-rl-h').value, 10) || 1920;
   }
 
   function readAllFromUI() {
@@ -424,7 +432,8 @@
     });
   });
 
-  ['auto-crop-universal', 'auto-rescale', 'rescale-w', 'rescale-h'].forEach((id) => {
+  ['auto-crop-universal', 'auto-rescale', 'rescale-w', 'rescale-h',
+   'rescale-yt-w', 'rescale-yt-h', 'rescale-rl-w', 'rescale-rl-h'].forEach((id) => {
     document.getElementById(id).addEventListener('change', readOutputFromUI);
   });
 
@@ -463,11 +472,13 @@
 
   document.getElementById('btn-rec').addEventListener('click', async () => {
     if (!currentSeq) return alert('load a sequence first');
-    await callLua('start_record', {});
-    setTimeout(() => {
-      // Convenience: minimise tool window so user can click in SU. Hammerspoon
-      // doesn't expose hide from JS; user can use ⌃⌥⌘V.
-    }, 100);
+    await callLua('start_record', { append: false });
+  });
+
+  document.getElementById('btn-rec-continue').addEventListener('click', async () => {
+    if (!currentSeq) return alert('load a sequence first');
+    await callLua('start_record', { append: true });
+    document.getElementById('last-output').textContent = 'continuing recording (append mode)';
   });
 
   document.getElementById('btn-play').addEventListener('click', async () => {

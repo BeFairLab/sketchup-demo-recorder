@@ -29,19 +29,20 @@ end
 --   'universal_2160' → source 2160×2160 px; YouTube center 1920×1080, Reels 1080×1920
 --   'universal_2880' → source 2880×2880 px; YouTube center 2880×1620, Reels 1620×2880
 --
--- opts.rescale = { w, h } → after crop, scale each variant to W×H.
+-- opts.rescale_youtube = { w, h } and opts.rescale_reels = { w, h } —
+-- optional per-variant rescale targets applied after crop.
 function M.split_universal(in_path, preset, opts, on_done)
   opts = opts or {}
   local crops = {}
   if preset == 'universal_2160' then
     crops = {
-      { name = 'youtube', filter = 'crop=1920:1080:120:540' },
-      { name = 'reels',   filter = 'crop=1080:1920:540:120' },
+      { name = 'youtube', filter = 'crop=1920:1080:120:540', rescale = opts.rescale_youtube },
+      { name = 'reels',   filter = 'crop=1080:1920:540:120', rescale = opts.rescale_reels   },
     }
   elseif preset == 'universal_2880' then
     crops = {
-      { name = 'youtube', filter = 'crop=2880:1620:0:630' },
-      { name = 'reels',   filter = 'crop=1620:2880:630:0' },
+      { name = 'youtube', filter = 'crop=2880:1620:0:630',   rescale = opts.rescale_youtube },
+      { name = 'reels',   filter = 'crop=1620:2880:630:0',   rescale = opts.rescale_reels   },
     }
   else
     on_done(false, in_path, 'unknown universal preset: ' .. tostring(preset))
@@ -52,12 +53,10 @@ function M.split_universal(in_path, preset, opts, on_done)
   local pending = #crops
   for _, c in ipairs(crops) do
     local vf = c.filter
-    if opts.rescale and opts.rescale.w and opts.rescale.h then
-      vf = vf .. string.format(',scale=%d:%d:flags=lanczos', opts.rescale.w, opts.rescale.h)
-    end
     local suffix = '_' .. c.name
-    if opts.rescale and opts.rescale.w and opts.rescale.h then
-      suffix = suffix .. string.format('_%dx%d', opts.rescale.w, opts.rescale.h)
+    if c.rescale and c.rescale.w and c.rescale.h then
+      vf = vf .. string.format(',scale=%d:%d:flags=lanczos', c.rescale.w, c.rescale.h)
+      suffix = suffix .. string.format('_%dx%d', c.rescale.w, c.rescale.h)
     end
     local out_path = suffix_path(in_path, suffix, 'mp4')
     ffmpeg_run({
