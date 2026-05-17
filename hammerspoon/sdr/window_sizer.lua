@@ -1,11 +1,17 @@
 -- window_sizer.lua — apply viewport sizing in two modes.
 --
 -- mode='viewport': call companion → Sketchup.resize_viewport(w,h) →
---                  read back hs.window frame to compute screen region of model area
--- mode='window':   resize SU window itself via hs.window:setFrame
+--                  read back hs.window frame to compute screen region of model area.
+--                  Companion reports vp size in PIXELS; we convert to logical pts.
+-- mode='window':   resize SU window itself via hs.window:setFrame.
 local bridge = require('sdr.companion_bridge')
 
 local M = {}
+
+-- Empirically: SU 2026 status bar = 25 logical pts. Title + toolbar = the rest
+-- (varies). We anchor the viewport to the BOTTOM of the window minus status,
+-- which avoids guessing top-chrome height.
+local STATUS_BAR_PT = 25
 
 local function find_su_window()
   local app = hs.application.find('SketchUp')
@@ -13,31 +19,50 @@ local function find_su_window()
   return app:mainWindow() or app:focusedWindow() or app:allWindows()[1]
 end
 
--- Returns the final recording region: {x, y, w, h} in screen points.
--- Pass viewport block from sequence: { mode, width, height, region }
-function M.apply(viewport, chrome_offsets)
-  chrome_offsets = chrome_offsets or { top = 70, bottom = 25, left = 0, right = 0 }
+local function backing_scale(frame)
+  -- Pick the screen that contains the window center.
+  local cx = frame.x + frame.w / 2
+  local cy = frame.y + frame.h / 2
+  for _, s in ipairs(hs.screen.allScreens()) do
+    local f = s:frame()
+    if cx >= f.x and cx < f.x + f.w and cy >= f.y and cy < f.y + f.h then
+      local mode = s:currentMode()
+      return mode and mode.scale or 1
+    end
+  end
+  return 1
+end
 
+-- Returns the final recording region: {x, y, w, h} in screen points.
+function M.apply(viewport, chrome_offsets)
   local win = find_su_window()
   if not win then return nil, 'SketchUp window not found' end
   win:focus()
 
   if viewport.mode == 'viewport' then
-    local _, err = bridge.resize_viewport(viewport.width, viewport.height)
+    local result, err = bridge.resize_viewport(viewport.width, viewport.height)
     if err then return nil, 'companion: ' .. err end
-    -- After resize, read SU window frame from hs.window.
-    hs.timer.usleep(100000) -- 100ms for SU to settle
+    hs.timer.usleep(150000) -- 150ms for SU to settle
     local frame = win:frame()
+    local scale = backing_scale(frame)
+
+    -- Companion-reported viewport pixel size (post-resize). Trust this over
+    -- the requested width/height in case SU clamped to display bounds.
+    local vp_px_w = (result and result.viewport and result.viewport.w) or viewport.width
+    local vp_px_h = (result and result.viewport and result.viewport.h) or viewport.height
+    local vp_pt_w = vp_px_w / scale
+    local vp_pt_h = vp_px_h / scale
+
+    -- Region anchored to bottom-of-window minus status bar.
     local region = {
-      x = frame.x + chrome_offsets.left,
-      y = frame.y + chrome_offsets.top,
-      w = frame.w - chrome_offsets.left - chrome_offsets.right,
-      h = frame.h - chrome_offsets.top - chrome_offsets.bottom,
+      x = frame.x,
+      y = frame.y + frame.h - STATUS_BAR_PT - vp_pt_h,
+      w = vp_pt_w,
+      h = vp_pt_h,
     }
     return region
 
   elseif viewport.mode == 'window' then
-    -- Set entire window to W×H. Keep current top-left position.
     local cur = win:frame()
     win:setFrame({ x = cur.x, y = cur.y, w = viewport.width, h = viewport.height })
     hs.timer.usleep(100000)

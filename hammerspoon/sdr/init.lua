@@ -33,15 +33,30 @@ local function notify(title, body)
   hs.notify.new({ title = title, informativeText = body or '' }):send()
 end
 
+local SETTINGS_KEY_ACTIVE = 'sdr.active_sequence_name'
+
 local function ensure_seq(name)
   current_seq_name = name
-  local seq, err = store.load(name)
+  hs.settings.set(SETTINGS_KEY_ACTIVE, name)
+  local seq = store.load(name)
   if not seq then
     seq = store.new_sequence(name)
     store.save(name, seq)
   end
   current_seq = seq
   return seq
+end
+
+-- Auto-load the last-used sequence on boot. Silent if missing.
+local function restore_active_sequence()
+  local name = hs.settings.get(SETTINGS_KEY_ACTIVE)
+  if not name then return end
+  local seq = store.load(name)
+  if seq then
+    current_seq_name = name
+    current_seq = seq
+    hs.printf('SDR restored active sequence: %s (%d events)', name, #(seq.events or {}))
+  end
 end
 
 -- ─── UI handlers ─────────────────────────────────────────────────────
@@ -59,6 +74,7 @@ local function register_handlers()
   ui.register('save_sequence', function(payload)
     current_seq = payload.sequence
     current_seq_name = payload.sequence.name
+    hs.settings.set(SETTINGS_KEY_ACTIVE, current_seq_name)
     store.save(current_seq_name, current_seq)
     return { saved = true }
   end)
@@ -262,8 +278,8 @@ function M.start(opts)
   register_handlers()
   bind_hotkeys()
   build_menubar()
-  -- Start the HTTP bridge so UI can talk to Lua. Port is auto-assigned.
   ui.start(config.repo_root)
+  restore_active_sequence()
   set_status('idle')
 
   hs.printf('SDR started. Repo: %s   Sequences: %s', config.repo_root, seq_dir)
