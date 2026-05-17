@@ -5,7 +5,10 @@ local M = {}
 local FFMPEG = '/opt/homebrew/bin/ffmpeg'
 
 local function ffmpeg_run(args, out_path, on_done)
+  hs.printf('ffmpeg_run args=%s', hs.inspect(args))
   local task = hs.task.new(FFMPEG, function(exitCode, stdOut, stdErr)
+    hs.printf('ffmpeg done exit=%s out=%s stderr=%q',
+      tostring(exitCode), out_path, tostring(stdErr or ''))
     if exitCode == 0 then
       on_done(true, out_path, 'ok')
     else

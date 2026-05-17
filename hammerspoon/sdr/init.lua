@@ -449,6 +449,10 @@ local function register_handlers()
         and { w = out.rescale_reels_w, h = out.rescale_reels_h }
         or rescale_arg
 
+      hs.printf('capture_done: preset=%s auto_crop=%s rescale=%s out=%s',
+        tostring(preset), tostring(out.auto_crop_universal),
+        tostring(out.rescale), hs.inspect(out))
+
       if out.auto_crop_universal and (preset == 'universal_1920' or preset == 'universal_2160') then
         set_status('capturing')
         post.split_universal(path, preset, {
