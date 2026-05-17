@@ -1,34 +1,46 @@
--- screen_capture.lua — screencapture -V wrapper.
+-- screen_capture.lua — wrap `screencapture -V` for fixed-duration region recording.
 --
--- screencapture supports -V <duration> for fixed-length recording and -R x,y,w,h
--- for a screen region. We use a child task; on stop_now we send SIGTERM and
--- wait for the file to be flushed.
+-- screencapture's -V mode runs for a fixed number of seconds then exits with
+-- a valid .mov. We give it the exact total length up-front and DO NOT
+-- terminate it early — SIGTERM tends to leave an invalid/empty file.
 local M = {}
 
-local current_task = nil
-local current_path = nil
-local current_started_at = nil
+local current_task   = nil
+local current_path   = nil
+local current_started = nil
+local current_seconds = nil
 
--- Start an unbounded recording of region. screencapture has no "until stopped"
--- mode for video — so we use a very long -V duration (3600s) and kill the
--- process when we want to stop. screencapture writes a valid mov on SIGTERM.
-function M.start(region, output_path, max_seconds)
-  if current_task then return false, 'recording already in progress' end
-
-  local seconds = max_seconds or 600
-
-  -- Determine display index by finding which display contains the region center.
+local function display_for_region(region)
   local cx = region.x + region.w / 2
   local cy = region.y + region.h / 2
-  local display_index = 1
   for i, scr in ipairs(hs.screen.allScreens()) do
     local f = scr:frame()
     if cx >= f.x and cx < f.x + f.w and cy >= f.y and cy < f.y + f.h then
-      display_index = i
-      break
+      return i
     end
   end
+  return 1
+end
 
+-- region {x,y,w,h} in logical points (matches what screencapture -R expects).
+-- output_path: full path to write the .mov file.
+-- seconds: fixed recording duration.
+-- on_done: optional callback(exitCode, file_path)
+function M.start(region, output_path, seconds, on_done)
+  if current_task then return false, 'recording already in progress' end
+  if not region or region.w <= 0 or region.h <= 0 then
+    return false, 'invalid region ' .. hs.inspect(region)
+  end
+  seconds = math.max(2, math.floor(seconds + 0.5))
+
+  -- Ensure parent dir exists.
+  local dir = output_path:match('(.+)/[^/]+$')
+  if dir then hs.fs.mkdir(dir) end
+
+  -- Remove any pre-existing file at this path (screencapture will not overwrite).
+  os.remove(output_path)
+
+  local display_index = display_for_region(region)
   local args = {
     '-V', tostring(seconds),
     '-D', tostring(display_index),
@@ -38,48 +50,30 @@ function M.start(region, output_path, max_seconds)
     output_path,
   }
 
-  -- Ensure parent dir exists
-  hs.fs.mkdir(string.match(output_path, '(.+)/[^/]+$') or '.')
+  local path = output_path
+  current_path = path
+  current_started = hs.timer.secondsSinceEpoch()
+  current_seconds = seconds
 
   current_task = hs.task.new('/usr/sbin/screencapture', function(exitCode, stdOut, stdErr)
     current_task = nil
+    local final_path = path
+    local size = 0
+    local f = io.open(final_path, 'r')
+    if f then f:seek('end'); size = f:seek() or 0; f:close() end
+    hs.printf('screencapture exit=%s size=%d path=%s', tostring(exitCode), size, final_path)
+    if on_done then on_done(exitCode, final_path, size, stdErr) end
   end, args)
-
-  current_path = output_path
-  current_started_at = hs.timer.secondsSinceEpoch()
 
   local ok = current_task:start()
   if not ok then
     current_task = nil
+    current_path = nil
     return false, 'failed to start screencapture'
   end
 
-  return true
-end
-
-function M.stop()
-  if not current_task then return false, 'not recording' end
-  local task = current_task
-  local path = current_path
-  current_task = nil
-  current_path = nil
-
-  -- SIGTERM and let it flush.
-  task:terminate()
-
-  -- Wait briefly for the file to appear / settle.
-  local target = hs.timer.secondsSinceEpoch() + 5
-  while hs.timer.secondsSinceEpoch() < target do
-    local f = io.open(path, 'r')
-    if f then
-      f:seek('end')
-      local size = f:seek()
-      f:close()
-      if size and size > 1024 then break end
-    end
-    hs.timer.usleep(100000)
-  end
-
+  hs.printf('screencapture started: %ds → %s   region=%d,%d %dx%d   display=%d',
+    seconds, path, region.x, region.y, region.w, region.h, display_index)
   return true, path
 end
 
@@ -88,8 +82,13 @@ function M.is_recording()
 end
 
 function M.elapsed()
-  if not current_started_at then return 0 end
-  return hs.timer.secondsSinceEpoch() - current_started_at
+  if not current_started then return 0 end
+  return hs.timer.secondsSinceEpoch() - current_started
+end
+
+function M.remaining()
+  if not current_started or not current_seconds then return 0 end
+  return math.max(0, current_seconds - M.elapsed())
 end
 
 return M

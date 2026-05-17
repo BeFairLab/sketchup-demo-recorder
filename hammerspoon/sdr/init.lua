@@ -173,42 +173,56 @@ local function register_handlers()
 
     local lead = payload.lead_ms or 1000
     local tail = payload.tail_ms or 1000
-    -- Default output dir: ~/Desktop (per user preference). Caller can override.
     local out_dir = payload.out_dir or (os.getenv('HOME') .. '/Desktop')
     hs.fs.mkdir(out_dir)
     local out_path = string.format('%s/%s_%s.mov', out_dir, seq.name, os.date('%Y%m%d_%H%M%S'))
 
-    local total_ms = replayer.total_duration_ms(seq, lead, tail)
-    local cap_seconds = math.ceil(total_ms / 1000) + 3 -- safety pad
+    -- Timeline:
+    --   t=0           start screencapture
+    --   t=PRE_ROLL    bring SU foreground, start replay (lead included)
+    --   t=...         replay finishes
+    --   t=END         capture stops naturally
+    local PRE_ROLL = 0.7 -- seconds from capture start until replay begins
+    local POST_ROLL = math.max(0.3, (tail / 1000))
+    local total_replay_s = replayer.total_duration_ms(seq, lead, 0) / 1000
+    local cap_seconds = PRE_ROLL + total_replay_s + POST_ROLL
 
-    local ok, err = capture.start(seq.viewport.region, out_path, cap_seconds)
-    if not ok then return { error = 'capture: ' .. err } end
     set_status('capturing')
 
-    -- Bring SU to foreground so replayed events land in SU, not the UI window.
+    local ok, err = capture.start(seq.viewport.region, out_path, cap_seconds, function(exitCode, path, size)
+      set_status('idle')
+      if size <= 0 then
+        ui.push('capture_done', { path = path, error = 'empty file (exit=' .. tostring(exitCode) .. ')' })
+        notify('SDR capture FAILED', path .. ' empty (exit ' .. tostring(exitCode) .. ')')
+      else
+        ui.push('capture_done', { path = path, size = size })
+        notify('SDR capture done', path .. ' ' .. math.floor(size / 1024) .. 'KB')
+      end
+    end)
+    if not ok then
+      set_status('idle')
+      return { error = 'capture: ' .. err }
+    end
+
     local app = hs.application.find('SketchUp')
     if app then app:activate() end
 
-    -- Brief settle delay so capture grabs the start frame.
-    hs.timer.doAfter(0.7, function()
+    hs.timer.doAfter(PRE_ROLL, function()
       replayer.play(seq, {
         lead_ms = lead,
-        tail_ms = tail,
+        tail_ms = 0,
         on_progress = function(i, n, e)
           ui.push('replay_progress', { i = i, n = n, type = e.type })
         end,
         on_done = function()
-          hs.timer.doAfter(0.3, function()
-            local _, path = capture.stop()
-            set_status('idle')
-            ui.push('capture_done', { path = path })
-            notify('SDR capture done', path)
-          end)
+          ui.push('replay_done', {})
+          -- We do NOT stop capture here. It runs out its -V duration so
+          -- the file is flushed cleanly. The on_done above will fire.
         end,
       })
     end)
 
-    return { capturing = true, output = out_path }
+    return { capturing = true, output = out_path, expected_seconds = cap_seconds }
   end)
 end
 
