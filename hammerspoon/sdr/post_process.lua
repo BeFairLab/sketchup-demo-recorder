@@ -31,23 +31,57 @@ end
 --
 -- opts.rescale_youtube = { w, h } and opts.rescale_reels = { w, h } —
 -- optional per-variant rescale targets applied after crop.
+--
+-- IMPORTANT: SketchUp clamps viewport height to fit the display, so the
+-- captured .mov can be SMALLER than the requested preset (e.g. universal_2160
+-- requested 2160×2160 px but lands on 2160×2044 on a 1117pt-high display).
+-- Hardcoded crop offsets miss center. We use ffmpeg expressions so the crop
+-- is centered relative to the ACTUAL input dimensions (iw/ih), and clamped
+-- so we never request a crop larger than the source — that would 0-byte the
+-- output mp4.
 function M.split_universal(in_path, preset, opts, on_done)
   opts = opts or {}
   local crops = {}
   if preset == 'universal_2160' then
     crops = {
-      { name = 'youtube', filter = 'crop=1920:1080:120:540', rescale = opts.rescale_youtube },
-      { name = 'reels',   filter = 'crop=1080:1920:540:120', rescale = opts.rescale_reels   },
+      { name = 'youtube', target_w = 1920, target_h = 1080, rescale = opts.rescale_youtube },
+      { name = 'reels',   target_w = 1080, target_h = 1920, rescale = opts.rescale_reels   },
     }
   elseif preset == 'universal_2880' then
     crops = {
-      { name = 'youtube', filter = 'crop=2880:1620:0:630',   rescale = opts.rescale_youtube },
-      { name = 'reels',   filter = 'crop=1620:2880:630:0',   rescale = opts.rescale_reels   },
+      { name = 'youtube', target_w = 2880, target_h = 1620, rescale = opts.rescale_youtube },
+      { name = 'reels',   target_w = 1620, target_h = 2880, rescale = opts.rescale_reels   },
     }
   else
     on_done(false, in_path, 'unknown universal preset: ' .. tostring(preset))
     return
   end
+
+  -- Build adaptive filters: clamp target to source, center the crop.
+  for _, c in ipairs(crops) do
+    local w_expr = string.format('min(iw,%d)', c.target_w)
+    local h_expr = string.format('min(ih,%d)', c.target_h)
+    c.filter = string.format('crop=%s:%s:(iw-%s)/2:(ih-%s)/2',
+      w_expr, h_expr, w_expr, h_expr)
+  end
+
+  -- Probe input dimensions via ffprobe so we can warn about clamp losses.
+  local probe = hs.task.new('/opt/homebrew/bin/ffprobe', function(_, stdOut, _)
+    local w, h = stdOut:match('(%d+)[xX](%d+)')
+    hs.printf('split_universal: source=%sx%s preset=%s', tostring(w), tostring(h), tostring(preset))
+    for _, c in ipairs(crops) do
+      if w and h and (c.target_w > tonumber(w) or c.target_h > tonumber(h)) then
+        hs.printf('  ⚠ %s crop %dx%d larger than source %sx%s → ffmpeg will clamp to source',
+          c.name, c.target_w, c.target_h, w, h)
+      end
+    end
+  end, {
+    '-v', 'error', '-select_streams', 'v:0',
+    '-show_entries', 'stream=width,height',
+    '-of', 'csv=s=x:p=0',
+    in_path,
+  })
+  probe:start()
 
   local outputs = {}
   local pending = #crops
