@@ -209,6 +209,9 @@ function M.play(sequence, opts)
   show_click_effects = pb.show_click_effects == true
   show_keystrokes = pb.show_keystrokes == true
   keystroke_anchor = pb.keystroke_anchor   -- {x, y} screen coords or nil
+  hs.printf('replay flags: auto_path=%s click_effects=%s keystrokes=%s anchor=%s',
+    tostring(auto_path), tostring(show_click_effects), tostring(show_keystrokes),
+    hs.inspect(keystroke_anchor))
 
   -- When auto_path, drop mouse_move events that happen BETWEEN clicks but
   -- KEEP moves that occur during a drag (mouse_down → moves → mouse_up).

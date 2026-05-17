@@ -3,10 +3,10 @@
 -- in the captured mp4 (good — shows interaction in the demo).
 local M = {}
 
-local DOT_FRAMES = 14         -- ~230ms at ~16ms/frame
+local DOT_FRAMES = 22         -- ~350ms at ~16ms/frame
 local DOT_INTERVAL_MS = 16
-local DOT_MAX_RADIUS = 32     -- in logical points
-local DOT_INITIAL_RADIUS = 6
+local DOT_MAX_RADIUS = 60     -- in logical points (much more visible)
+local DOT_INITIAL_RADIUS = 10
 
 local active_dots = {}        -- {canvas, frame_idx, x, y, color}
 
@@ -43,15 +43,15 @@ end
 -- color = {r, g, b} 0..1 (default red).
 function M.click_dot(x, y, color)
   color = color or { 1.0, 0.30, 0.30 }
+  hs.printf('click_dot @ %.0f,%.0f', x, y)
   local canvas = hs.canvas.new({
     x = x - DOT_INITIAL_RADIUS,
     y = y - DOT_INITIAL_RADIUS,
     w = DOT_INITIAL_RADIUS * 2,
     h = DOT_INITIAL_RADIUS * 2,
   })
-  -- 'screenSaver' is the highest user-level NSWindowLevel that screencapture
-  -- still includes. 'overlay' is the same in many builds but not all.
-  canvas:level(hs.canvas.windowLevels.screenSaver)
+  -- 'floating' is captured by screencapture; 'screenSaver' often is filtered.
+  canvas:level(hs.canvas.windowLevels.floating)
   canvas:behavior({ 'canJoinAllSpaces', 'stationary' })
   canvas:appendElements({
     type = 'circle',
@@ -97,8 +97,9 @@ function M.show_keystroke(text, x, y)
   -- Rough size: KEY_FONT_SIZE * 0.6 px per char.
   local w = math.max(36, math.floor(#text * KEY_FONT_SIZE * 0.62 + KEY_PADDING * 2 + 0.5))
   local h = KEY_FONT_SIZE + KEY_PADDING * 2
+  hs.printf('show_keystroke "%s" @ %.0f,%.0f', tostring(text), x, y)
   ks_canvas = hs.canvas.new({ x = x, y = y, w = w, h = h })
-  ks_canvas:level(hs.canvas.windowLevels.screenSaver)
+  ks_canvas:level(hs.canvas.windowLevels.floating)
   ks_canvas:behavior({ 'canJoinAllSpaces', 'stationary' })
   ks_canvas:appendElements({
     type = 'rectangle',
