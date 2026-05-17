@@ -402,33 +402,57 @@
     document.getElementById('last-output').textContent = 'cleared events';
   });
 
+  // Build a "preset envelope" from current UI controls (works WITHOUT a
+  // loaded timeline — presets are first-class, decoupled from timelines).
+  function buildPresetFromUI() {
+    // Start from currentSeq if present so user-typed/edited values survive,
+    // else from a clean default seed.
+    const seed = currentSeq ? JSON.parse(JSON.stringify(currentSeq)) : {
+      version: 1, name: '__draft__', events: [],
+      viewport: {}, playback: {}, output: {}, chrome_offsets: {},
+    };
+    const saved = currentSeq;
+    currentSeq = seed;
+    readAllFromUI();
+    const result = seed;
+    currentSeq = saved;
+    return result;
+  }
+
   // ─── Preset tab ────────────────────────────────────────────────
-  // New preset = prompt → write current settings to <name>.json
+  // New preset = prompt → write current settings to <name>.json.
+  // Does NOT require a loaded timeline.
   document.getElementById('btn-preset-new').addEventListener('click', async () => {
-    if (!currentSeq) return alert('load a timeline first');
     const name = prompt('Preset name:');
     if (!name) return;
-    readAllFromUI();
+    const envelope = buildPresetFromUI();
     try {
-      await callLua('save_preset', { name: name.trim(), sequence: currentSeq });
-      currentSeq.preset_name = name.trim();
-      await callLua('save_preset_to_sequence', { sequence: currentSeq });
+      await callLua('save_preset', { name: name.trim(), sequence: envelope });
       await refreshPresetList();
-      document.getElementById('preset-name').value = name;
-      document.getElementById('preset-select').value = name;
-      updateActiveLabels();
+      document.getElementById('preset-name').value = name.trim();
+      document.getElementById('preset-select').value = name.trim();
+      // If a timeline IS loaded, link it.
+      if (currentSeq) {
+        currentSeq.preset_name = name.trim();
+        await callLua('save_preset_to_sequence', { sequence: currentSeq });
+        updateActiveLabels();
+      } else {
+        document.getElementById('preset-active').textContent = name.trim();
+      }
       document.getElementById('last-output').textContent = 'created + saved preset: ' + name;
     } catch (e) { alert('preset new failed: ' + e.message); }
   });
 
   document.getElementById('btn-preset-save').addEventListener('click', async () => {
-    if (!currentSeq) return;
-    readAllFromUI();
-    const name = document.getElementById('preset-name').value.trim() || currentSeq.preset_name;
-    if (!name) return alert('preset name required (or pick one)');
-    await callLua('save_preset', { name, sequence: currentSeq });
-    currentSeq.preset_name = name;
-    await callLua('save_preset_to_sequence', { sequence: currentSeq });
+    const name = document.getElementById('preset-name').value.trim() ||
+                 (currentSeq && currentSeq.preset_name);
+    if (!name) return alert('preset name required (pick or type one first)');
+    const envelope = buildPresetFromUI();
+    await callLua('save_preset', { name, sequence: envelope });
+    if (currentSeq) {
+      currentSeq.preset_name = name;
+      await callLua('save_preset_to_sequence', { sequence: currentSeq });
+    }
     await refreshPresetList();
     updateActiveLabels();
     document.getElementById('last-output').textContent = 'preset saved: ' + name;
