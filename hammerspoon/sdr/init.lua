@@ -118,6 +118,19 @@ local function register_handlers()
     return store.list()
   end)
 
+  ui.register('list_sequences_with_meta', function(_)
+    local out = {}
+    for _, name in ipairs(store.list()) do
+      local seq = store.load(name)
+      table.insert(out, {
+        name = name,
+        preset_name = seq and seq.preset_name or nil,
+        events = seq and #(seq.events or {}) or 0,
+      })
+    end
+    return out
+  end)
+
   ui.register('get_active_sequence', function(_)
     return { name = current_seq_name, sequence = current_seq }
   end)

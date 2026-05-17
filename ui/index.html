@@ -14,46 +14,80 @@
     </div>
   </header>
 
+  <!-- Always-visible top: sequence + preset selectors -->
+  <section class="card">
+    <div class="row">
+      <label>Timeline
+        <select id="seq-select"></select>
+      </label>
+      <input id="seq-name" placeholder="timeline-name">
+      <button id="btn-new">New</button>
+      <button id="btn-load">Load</button>
+      <button id="btn-save-timeline">Save timeline</button>
+      <span class="muted">active: <span id="timeline-active">— none —</span></span>
+    </div>
+    <div class="row">
+      <label>Preset
+        <select id="preset-select"></select>
+      </label>
+      <input id="preset-name" placeholder="preset-name">
+      <button id="btn-preset-new">New</button>
+      <button id="btn-preset-load">Load</button>
+      <button id="btn-preset-save">Save</button>
+      <button id="btn-preset-duplicate">Duplicate</button>
+      <button id="btn-save-preset-to-seq">Save preset → timeline</button>
+      <span class="muted">active: <span id="preset-active">— none —</span></span>
+    </div>
+    <div class="row">
+      <span class="muted" id="timeline-preset-link"></span>
+      <button id="btn-ping">Ping companion</button>
+    </div>
+  </section>
+
   <nav class="tabs">
-    <button class="tab-btn active" data-tab="editor">Editor</button>
+    <button class="tab-btn active" data-tab="timeline">Timeline</button>
+    <button class="tab-btn" data-tab="recording">Recording</button>
+    <button class="tab-btn" data-tab="preset">Preset settings</button>
     <button class="tab-btn" data-tab="manage">Manage</button>
   </nav>
 
-  <!-- ─── EDITOR TAB ────────────────────────────────────────── -->
-  <div class="tab" data-tab="editor">
-
+  <!-- ─── TIMELINE TAB ───────────────────────────────────── -->
+  <div class="tab" data-tab="timeline">
     <section class="card">
-      <h2>Preset <span id="preset-active" class="muted">— none —</span></h2>
+      <h2>Timeline events <span id="timeline-meta" class="muted"></span></h2>
       <div class="row">
-        <label>Library
-          <select id="preset-select"></select>
-        </label>
-        <input id="preset-name" placeholder="preset-name">
-        <button id="btn-preset-new">New</button>
-        <button id="btn-preset-load">Load</button>
-        <button id="btn-preset-save">Save</button>
-        <button id="btn-preset-duplicate">Duplicate</button>
-        <button id="btn-preset-apply">Apply to current timeline</button>
+        <button id="btn-play">▶ Play (no capture)</button>
+        <button id="btn-capture" class="primary">⏺ Record + Replay</button>
+        <button id="btn-apply-auto">Apply auto-path to timeline (strip moves)</button>
+        <span class="muted">⌃⌥⌘P play</span>
+      </div>
+      <div id="timeline" class="timeline"></div>
+    </section>
+    <section class="card">
+      <h2>Last output</h2>
+      <div id="last-output" class="muted">—</div>
+    </section>
+  </div>
+
+  <!-- ─── RECORDING TAB ──────────────────────────────────── -->
+  <div class="tab" data-tab="recording" hidden>
+    <section class="card">
+      <h2>Recording</h2>
+      <div class="row">
+        <button id="btn-rec" class="primary">● Record clicks (fresh)</button>
+        <button id="btn-rec-continue">↻ Continue recording</button>
+      </div>
+      <div class="row">
+        <span class="muted">Hotkeys: ⌃⌥⌘R fresh · ⌃⌥⌘E continue · ⌃⌥⌘P play · ⌃⌥⌘V toggle UI</span>
+      </div>
+      <div class="row">
+        <span id="rec-events" class="muted">0 events</span>
       </div>
     </section>
+  </div>
 
-    <section class="card">
-      <h2>Timeline <span id="timeline-active" class="muted">— none —</span></h2>
-      <div class="row">
-        <label>Library
-          <select id="seq-select"></select>
-        </label>
-        <input id="seq-name" placeholder="timeline-name">
-        <button id="btn-new">New</button>
-        <button id="btn-load">Load</button>
-        <button id="btn-save-timeline">Save timeline</button>
-        <button id="btn-save-preset-to-seq">Save preset → timeline</button>
-        <button id="btn-ping">Ping</button>
-      </div>
-      <div class="row">
-        <span class="muted" id="timeline-preset-link"></span>
-      </div>
-    </section>
+  <!-- ─── PRESET SETTINGS TAB ────────────────────────────── -->
+  <div class="tab" data-tab="preset" hidden>
 
     <section class="card">
       <h2>Viewport</h2>
@@ -89,16 +123,7 @@
         <label>Y
           <input type="number" id="overlay-shift-y" value="0" step="1" style="width:70px">
         </label>
-      </div>
-    </section>
-
-    <section class="card">
-      <h2>Recording</h2>
-      <div class="row">
-        <button id="btn-rec" class="primary">● Record clicks</button>
-        <button id="btn-rec-continue">↻ Continue recording</button>
-        <span class="muted">⌃⌥⌘R fresh · ⌃⌥⌘E continue</span>
-        <span id="rec-events" class="muted">0 events</span>
+        <span class="muted">applies to overlay AND capture region</span>
       </div>
     </section>
 
@@ -112,7 +137,7 @@
         </label>
         <label>Easing
           <select id="auto-path-easing">
-            <option value="in_out" selected>Ease in-out</option>
+            <option value="in_out" selected>Ease in-out (quintic)</option>
             <option value="out">Ease out</option>
             <option value="in">Ease in</option>
             <option value="linear">Linear</option>
@@ -121,7 +146,7 @@
       </div>
       <div class="row">
         <label><input type="checkbox" id="click-effects"> Show click circles</label>
-        <label><input type="checkbox" id="show-keystrokes"> Show keystrokes (English)</label>
+        <label><input type="checkbox" id="show-keystrokes"> Show keystrokes (English, includes modifiers while held)</label>
       </div>
       <div class="row">
         <label>Pre-delay
@@ -133,47 +158,37 @@
           <span class="muted">ms</span>
         </label>
       </div>
-      <div class="row">
-        <button id="btn-apply-auto">Apply auto-path to timeline (strip moves)</button>
-      </div>
     </section>
 
     <section class="card">
-      <h2>Timeline events <span id="timeline-meta" class="muted"></span></h2>
+      <h2>Output — non-universal</h2>
       <div class="row">
-        <button id="btn-play">▶ Play (no capture)</button>
-        <button id="btn-capture" class="primary">⏺ Record + Replay</button>
-        <span class="muted">⌃⌥⌘P play</span>
-      </div>
-      <div id="timeline" class="timeline"></div>
-    </section>
-
-    <section class="card">
-      <h2>Output</h2>
-      <div class="row">
-        <label><input type="checkbox" id="auto-crop-universal"> Auto-crop universal → YouTube + Reels mp4</label>
-      </div>
-      <div class="row">
-        <label><input type="checkbox" id="auto-rescale"> Rescale (non-universal)</label>
+        <label><input type="checkbox" id="auto-rescale"> Rescale captured mp4</label>
         <label>W <input type="number" id="rescale-w" value="1920" min="0" style="width:80px"></label>
         <label>H <input type="number" id="rescale-h" value="1080" min="0" style="width:80px"></label>
       </div>
+    </section>
+
+    <section class="card">
+      <h2>Output — universal</h2>
       <div class="row">
-        <span class="muted">Universal rescale per variant:</span>
-        <label>YouTube W <input type="number" id="rescale-yt-w" value="1920" min="0" style="width:80px"></label>
+        <label><input type="checkbox" id="auto-crop-universal"> Auto-crop → YouTube + Reels mp4</label>
+      </div>
+      <div class="row">
+        <span class="muted">Rescale horizontal (YouTube crop)</span>
+        <label>W <input type="number" id="rescale-yt-w" value="1920" min="0" style="width:80px"></label>
         <label>H <input type="number" id="rescale-yt-h" value="1080" min="0" style="width:80px"></label>
-        <label>Reels W <input type="number" id="rescale-rl-w" value="1080" min="0" style="width:80px"></label>
+      </div>
+      <div class="row">
+        <span class="muted">Rescale vertical (Reels crop)</span>
+        <label>W <input type="number" id="rescale-rl-w" value="1080" min="0" style="width:80px"></label>
         <label>H <input type="number" id="rescale-rl-h" value="1920" min="0" style="width:80px"></label>
       </div>
     </section>
 
-    <section class="card">
-      <h2>Last output</h2>
-      <div id="last-output" class="muted">—</div>
-    </section>
   </div>
 
-  <!-- ─── MANAGE TAB ────────────────────────────────────────── -->
+  <!-- ─── MANAGE TAB ─────────────────────────────────────── -->
   <div class="tab" data-tab="manage" hidden>
     <section class="card">
       <h2>Presets</h2>

@@ -403,8 +403,7 @@
     }
   });
 
-  document.getElementById('btn-preset-apply').addEventListener('click', () =>
-    document.getElementById('btn-preset-load').click());
+  // (btn-preset-apply removed — Load already applies preset to current timeline)
 
   // Viewport
   document.getElementById('vp-preset').addEventListener('change', (e) => {
@@ -534,7 +533,7 @@
   async function renderManagePane() {
     const [presets, sequences] = await Promise.all([
       callLua('list_presets', {}),
-      callLua('list_sequences', {}),
+      callLua('list_sequences_with_meta', {}),
     ]);
     const mp = document.getElementById('manage-presets');
     mp.innerHTML = '';
@@ -543,17 +542,25 @@
 
     const ms = document.getElementById('manage-timelines');
     ms.innerHTML = '';
-    (sequences || []).forEach((name) => ms.appendChild(makeManageRow('timeline', name)));
+    (sequences || []).forEach((info) => ms.appendChild(makeManageRow('timeline', info.name, info)));
     if (!sequences || !sequences.length) ms.innerHTML = '<div class="muted">no timelines yet</div>';
   }
 
-  function makeManageRow(kind, name) {
+  function makeManageRow(kind, name, info) {
     const row = document.createElement('div');
     row.className = 'manage-row';
     const nm = document.createElement('span');
     nm.className = 'name';
     nm.textContent = name;
     row.appendChild(nm);
+
+    if (kind === 'timeline' && info) {
+      const meta = document.createElement('span');
+      meta.className = 'muted';
+      meta.style.fontSize = '11px';
+      meta.textContent = `(${info.events} events, preset: ${info.preset_name || '—'})`;
+      row.appendChild(meta);
+    }
 
     const renameBtn = document.createElement('button');
     renameBtn.textContent = 'Rename';
