@@ -384,8 +384,9 @@ local function register_handlers()
     --   t=END         capture stops naturally
     local PRE_ROLL = 0.7 -- seconds from capture start until replay begins
     local POST_ROLL = math.max(0.3, (tail / 1000))
+    local SAFETY_PAD = 2.0 -- extra so any duration miscalc doesn't truncate the take
     local total_replay_s = replayer.total_duration_ms(seq, lead, 0) / 1000
-    local cap_seconds = PRE_ROLL + total_replay_s + POST_ROLL
+    local cap_seconds = PRE_ROLL + total_replay_s + POST_ROLL + SAFETY_PAD
 
     set_status('capturing')
 

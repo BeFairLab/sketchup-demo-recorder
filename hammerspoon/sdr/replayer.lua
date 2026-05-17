@@ -272,9 +272,12 @@ function M.total_duration_ms(sequence, lead_ms, tail_ms)
   local ap  = pb.auto_path == true
   local pps = tonumber(pb.auto_path_pps) or 1000
   local prev_xy = nil
+  local in_drag = false
   for _, e in ipairs(sequence.events) do
-    if ap and e.type == 'mouse_move' then
-      -- skipped in playback
+    -- Auto-path filter must mirror replayer: skip mouse_move OUTSIDE a drag,
+    -- but KEEP mouse_move pauses inside a drag (mouse_down → ... → mouse_up).
+    if ap and e.type == 'mouse_move' and not in_drag then
+      -- skip pause; this event won't replay
     else
       total = total + math.max(0, e.pause_before_ms or 0)
       if ap and (e.type == 'mouse_down' or e.type == 'mouse_up') then
@@ -289,6 +292,8 @@ function M.total_duration_ms(sequence, lead_ms, tail_ms)
         if x and y then prev_xy = { x = x, y = y } end
       end
     end
+    if e.type == 'mouse_down' then in_drag = true
+    elseif e.type == 'mouse_up' then in_drag = false end
   end
   return total
 end

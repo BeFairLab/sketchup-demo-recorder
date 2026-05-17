@@ -205,18 +205,24 @@
     const pps = pb.auto_path_pps || 1000;
     let total = 0;
     let prev = null;
+    let inDrag = false;
     for (const e of seq.events || []) {
-      if (ap && e.type === 'mouse_move') continue;
-      total += (e.pause_before_ms || 0);
-      if (ap && (e.type === 'mouse_down' || e.type === 'mouse_up')) {
-        const x = (e.x_window != null ? e.x_window : e.x);
-        const y = (e.y_window != null ? e.y_window : e.y);
-        if (prev && x != null && y != null) {
-          const dx = x - prev.x, dy = y - prev.y;
-          total += Math.sqrt(dx*dx + dy*dy) / Math.max(50, pps) * 1000;
+      if (ap && e.type === 'mouse_move' && !inDrag) {
+        // skipped in replay
+      } else {
+        total += (e.pause_before_ms || 0);
+        if (ap && (e.type === 'mouse_down' || e.type === 'mouse_up')) {
+          const x = (e.x_window != null ? e.x_window : e.x);
+          const y = (e.y_window != null ? e.y_window : e.y);
+          if (prev && x != null && y != null) {
+            const dx = x - prev.x, dy = y - prev.y;
+            total += Math.sqrt(dx*dx + dy*dy) / Math.max(50, pps) * 1000;
+          }
+          if (x != null && y != null) prev = { x, y };
         }
-        if (x != null && y != null) prev = { x, y };
       }
+      if (e.type === 'mouse_down') inDrag = true;
+      else if (e.type === 'mouse_up') inDrag = false;
     }
     return total;
   }
