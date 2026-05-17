@@ -59,7 +59,45 @@
   };
 
   // ─── State ─────────────────────────────────────────────────────
-  let currentSeq = null;
+  let currentSeq = null;        // active timeline (for record / play / capture)
+  let activePresetName = null;  // header's chosen preset (drives Apply to SketchUp)
+  let editingPreset = null;     // {name, viewport, playback, output, ...} — Preset Settings tab only
+  let editingPresetDirty = false;
+
+  function defaultPresetBody() {
+    return {
+      viewport: {
+        mode: 'viewport', preset: 'youtube_1080p',
+        width: 1920, height: 1080,
+        overlay_shift: { dx: 0, dy: 0 },
+      },
+      chrome_offsets: { top: 70, bottom: 25, left: 0, right: 0 },
+      playback: {
+        auto_path: false, auto_path_pps: 1000, auto_path_easing: 'in_out',
+        show_click_effects: false, show_keystrokes: false,
+        pre_delay_ms: 1000, post_delay_ms: 1000,
+      },
+      output: {
+        auto_crop_universal: false,
+        rescale: false, rescale_w: 1920, rescale_h: 1080,
+        rescale_youtube_w: 1920, rescale_youtube_h: 1080,
+        rescale_reels_w: 1080, rescale_reels_h: 1920,
+      },
+    };
+  }
+
+  function updateDirtyBadge() {
+    const el = document.getElementById('preset-dirty');
+    if (!el) return;
+    el.textContent = editingPresetDirty ? '● Unsaved changes' : '';
+    el.style.color = editingPresetDirty ? '#d70015' : '';
+  }
+
+  function markEditingDirty() {
+    if (!editingPreset) return;
+    editingPresetDirty = true;
+    updateDirtyBadge();
+  }
 
   function updateActiveLabels() {
     const pa = document.getElementById('preset-active');
@@ -107,13 +145,14 @@
     if (!name) return;
     const seq = await callLua('load_sequence', { name });
     currentSeq = seq;
-    applySeqToUI();
     renderTimeline();
     updateActiveLabels();
     if (seq.preset_name) {
       document.getElementById('preset-select').value = seq.preset_name;
-      document.getElementById('preset-select-edit').value = seq.preset_name;
+      activePresetName = seq.preset_name;
     }
+    // NOTE: do NOT populate preset-tab controls here — that's the editor's
+    // domain (use preset-select-edit on the Preset Settings tab).
   }
 
   async function loadPresetIntoCurrentSeq(name) {
@@ -222,22 +261,72 @@
     readOutputFromUI();
   }
 
-  // ─── Auto-save preset settings (viewport + playback + output) ──
-  // Triggered when user changes any preset-tab control. Persists to disk
-  // under the active preset name. If no preset name is set, prompts once.
-  let _autoSaveDebounce = null;
-  function autoSavePreset() {
-    readAllFromUI();
-    if (!currentSeq) return;
-    if (!currentSeq.preset_name) return; // no active preset → silent skip
-    clearTimeout(_autoSaveDebounce);
-    _autoSaveDebounce = setTimeout(async () => {
-      try {
-        await callLua('save_preset', { name: currentSeq.preset_name, sequence: currentSeq });
-        // Also update the timeline so its linked preset_name stays in sync.
-        await callLua('save_preset_to_sequence', { sequence: currentSeq });
-      } catch (e) { console.warn('autoSavePreset:', e.message); }
-    }, 400);
+  // ─── Editing-preset ↔ UI controls ──────────────────────────────
+  // The Preset Settings tab is a pure editor: UI controls bind to
+  // editingPreset, NOT to currentSeq. Changes mark dirty; explicit Save
+  // writes back to disk.
+
+  function applyEditingPresetToControls() {
+    const ep = editingPreset || defaultPresetBody();
+    const vp = ep.viewport || {};
+    document.querySelectorAll('input[name=vp-mode]').forEach((r) => {
+      r.checked = (r.value === (vp.mode || 'viewport'));
+    });
+    if (vp.preset) document.getElementById('vp-preset').value = vp.preset;
+    document.getElementById('vp-w').value = vp.width || 1920;
+    document.getElementById('vp-h').value = vp.height || 1080;
+    const sh = vp.overlay_shift || { dx: 0, dy: 0 };
+    document.getElementById('overlay-shift-x').value = sh.dx || 0;
+    document.getElementById('overlay-shift-y').value = sh.dy || 0;
+
+    const pb = ep.playback || {};
+    document.getElementById('auto-path').checked = pb.auto_path === true;
+    document.getElementById('auto-path-pps').value = pb.auto_path_pps || 1000;
+    document.getElementById('auto-path-easing').value = pb.auto_path_easing || 'in_out';
+    document.getElementById('click-effects').checked = pb.show_click_effects === true;
+    document.getElementById('show-keystrokes').checked = pb.show_keystrokes === true;
+    document.getElementById('pre-delay-ms').value  = (pb.pre_delay_ms  != null) ? pb.pre_delay_ms  : 1000;
+    document.getElementById('post-delay-ms').value = (pb.post_delay_ms != null) ? pb.post_delay_ms : 1000;
+
+    const out = ep.output || {};
+    document.getElementById('auto-crop-universal').checked = out.auto_crop_universal === true;
+    document.getElementById('auto-rescale').checked = out.rescale === true;
+    document.getElementById('rescale-w').value = out.rescale_w || 1920;
+    document.getElementById('rescale-h').value = out.rescale_h || 1080;
+    document.getElementById('rescale-yt-w').value = out.rescale_youtube_w || 1920;
+    document.getElementById('rescale-yt-h').value = out.rescale_youtube_h || 1080;
+    document.getElementById('rescale-rl-w').value = out.rescale_reels_w || 1080;
+    document.getElementById('rescale-rl-h').value = out.rescale_reels_h || 1920;
+  }
+
+  function readControlsIntoEditingPreset() {
+    if (!editingPreset) editingPreset = defaultPresetBody();
+    editingPreset.viewport = editingPreset.viewport || {};
+    editingPreset.viewport.mode = document.querySelector('input[name=vp-mode]:checked').value;
+    editingPreset.viewport.preset = document.getElementById('vp-preset').value;
+    editingPreset.viewport.width  = parseInt(document.getElementById('vp-w').value, 10);
+    editingPreset.viewport.height = parseInt(document.getElementById('vp-h').value, 10);
+    editingPreset.viewport.overlay_shift = {
+      dx: parseInt(document.getElementById('overlay-shift-x').value, 10) || 0,
+      dy: parseInt(document.getElementById('overlay-shift-y').value, 10) || 0,
+    };
+    editingPreset.playback = editingPreset.playback || {};
+    editingPreset.playback.auto_path          = document.getElementById('auto-path').checked;
+    editingPreset.playback.auto_path_pps      = parseInt(document.getElementById('auto-path-pps').value, 10) || 1000;
+    editingPreset.playback.auto_path_easing   = document.getElementById('auto-path-easing').value || 'in_out';
+    editingPreset.playback.show_click_effects = document.getElementById('click-effects').checked;
+    editingPreset.playback.show_keystrokes    = document.getElementById('show-keystrokes').checked;
+    editingPreset.playback.pre_delay_ms       = parseInt(document.getElementById('pre-delay-ms').value, 10);
+    editingPreset.playback.post_delay_ms      = parseInt(document.getElementById('post-delay-ms').value, 10);
+    editingPreset.output = editingPreset.output || {};
+    editingPreset.output.auto_crop_universal = document.getElementById('auto-crop-universal').checked;
+    editingPreset.output.rescale   = document.getElementById('auto-rescale').checked;
+    editingPreset.output.rescale_w = parseInt(document.getElementById('rescale-w').value, 10) || 1920;
+    editingPreset.output.rescale_h = parseInt(document.getElementById('rescale-h').value, 10) || 1080;
+    editingPreset.output.rescale_youtube_w = parseInt(document.getElementById('rescale-yt-w').value, 10) || 1920;
+    editingPreset.output.rescale_youtube_h = parseInt(document.getElementById('rescale-yt-h').value, 10) || 1080;
+    editingPreset.output.rescale_reels_w   = parseInt(document.getElementById('rescale-rl-w').value, 10) || 1080;
+    editingPreset.output.rescale_reels_h   = parseInt(document.getElementById('rescale-rl-h').value, 10) || 1920;
   }
 
   // ─── Timeline ──────────────────────────────────────────────────
@@ -346,16 +435,28 @@
   }
 
   // ─── Header (top card) ─────────────────────────────────────────
+  // Header preset = ACTIVE preset for capture/replay. Independent of the
+  // Preset Settings tab editor.
   document.getElementById('preset-select').addEventListener('change', async (e) => {
     const name = e.target.value;
+    activePresetName = name || null;
     if (!name) return;
-    document.getElementById('preset-name').value = name;
+    // If a timeline is loaded, link the preset (warns on mismatch).
     if (currentSeq) await loadPresetIntoCurrentSeq(name);
   });
 
   async function applyViewport() {
-    // Build envelope from UI — works without a loaded timeline.
-    const envelope = buildPresetFromUI();
+    // Build envelope from the ACTIVE preset (header) — falls back to current
+    // timeline, then to the editing preset, then to defaults.
+    let envelope = null;
+    if (activePresetName) {
+      const p = await callLua('get_preset', { name: activePresetName });
+      if (p && !p.error) envelope = Object.assign({ name: '__active__', events: [] }, p);
+    }
+    if (!envelope && currentSeq) envelope = JSON.parse(JSON.stringify(currentSeq));
+    if (!envelope && editingPreset) envelope = Object.assign({ name: '__editing__', events: [] }, editingPreset);
+    if (!envelope) envelope = Object.assign({ name: '__defaults__', events: [] }, defaultPresetBody());
+
     try {
       const result = await callLua('apply_viewport', { sequence: envelope });
       if (result && result.error) {
@@ -450,68 +551,82 @@
     return result;
   }
 
-  // ─── Preset tab ────────────────────────────────────────────────
-  // The "Editing preset" dropdown drives which preset gets saved/duplicated.
-  // Loading a preset from this dropdown applies it to the active timeline
-  // (if any) AND populates the UI controls so user can edit + save.
+  // ─── Preset Settings tab (decoupled editor) ────────────────────
+  // This tab manages PRESET FILES only. It does NOT affect:
+  //   - header's active preset (used for Apply / capture)
+  //   - currentSeq.preset_name
+  //   - any in-progress recording / playback
+  //
+  // Editing flow:
+  //   1. Pick preset in 'Editing preset' dropdown → loads its values into
+  //      the UI controls below. editingPresetDirty = false.
+  //   2. Change any control → editingPresetDirty = true; '● Unsaved changes'
+  //      badge appears.
+  //   3. Click 'Save changes' → writes back to that preset file. Dirty cleared.
+  //   4. Click 'New…' → prompt for name, controls reset to defaults, dirty
+  //      cleared after immediate save.
+
+  function confirmDiscardDirty() {
+    if (!editingPresetDirty) return true;
+    return confirm('You have unsaved changes to "' + (editingPreset && editingPreset.name)
+      + '". Discard them?');
+  }
+
   document.getElementById('preset-select-edit').addEventListener('change', async (e) => {
     const name = e.target.value;
-    if (!name) return;
-    document.getElementById('preset-select').value = name;
-    if (currentSeq) {
-      await loadPresetIntoCurrentSeq(name);
-    } else {
-      // No timeline → just load preset values into UI for editing/saving.
-      const p = await callLua('apply_preset', { name }).catch(() => null);
-      // apply_preset requires currentSeq; fall back to manual load.
-      const preset = await callLua('list_presets', {}).then(() => null); // noop
-      // Use a synthetic seq to drive UI controls.
-      currentSeq = { name: '__draft__', events: [],
-        viewport: {}, playback: {}, output: {}, chrome_offsets: {},
-        preset_name: name };
-      // Re-fetch preset content via apply_preset by temporarily allowing it.
-      const r = await callLua('apply_preset', { name }).catch(() => null);
-      if (r && r.sequence) currentSeq = r.sequence;
-      applySeqToUI(); updateActiveLabels();
+    if (!name) {
+      editingPreset = null;
+      editingPresetDirty = false;
+      updateDirtyBadge();
+      return;
     }
+    if (!confirmDiscardDirty()) {
+      // revert dropdown to whatever is currently being edited
+      e.target.value = (editingPreset && editingPreset.name) || '';
+      return;
+    }
+    try {
+      const preset = await callLua('get_preset', { name });
+      if (preset && preset.error) return alert(preset.error);
+      editingPreset = Object.assign({ name }, preset);
+      editingPresetDirty = false;
+      applyEditingPresetToControls();
+      updateDirtyBadge();
+    } catch (e2) { alert('load preset failed: ' + e2.message); }
   });
 
   document.getElementById('btn-preset-new').addEventListener('click', async () => {
-    const name = prompt('Preset name:');
+    if (!confirmDiscardDirty()) return;
+    const name = prompt('New preset name:');
     if (!name) return;
-    const envelope = buildPresetFromUI();
+    editingPreset = Object.assign({ name: name.trim() }, defaultPresetBody());
+    applyEditingPresetToControls();
     try {
-      await callLua('save_preset', { name: name.trim(), sequence: envelope });
+      await callLua('save_preset', { name: name.trim(), sequence: editingPreset });
+      editingPresetDirty = false;
+      updateDirtyBadge();
       await refreshPresetList();
-      document.getElementById('preset-select').value = name.trim();
       document.getElementById('preset-select-edit').value = name.trim();
-      if (currentSeq) {
-        currentSeq.preset_name = name.trim();
-        await callLua('save_preset_to_sequence', { sequence: currentSeq });
-      }
-      updateActiveLabels();
-      document.getElementById('last-output').textContent = 'created + saved preset: ' + name;
+      document.getElementById('last-output').textContent = 'created preset (defaults): ' + name;
     } catch (e) { alert('preset new failed: ' + e.message); }
   });
 
   document.getElementById('btn-preset-save').addEventListener('click', async () => {
-    const name = document.getElementById('preset-select-edit').value
-              || (currentSeq && currentSeq.preset_name);
-    if (!name) return alert('Pick a preset to save into (or create a new one)');
-    const envelope = buildPresetFromUI();
-    await callLua('save_preset', { name, sequence: envelope });
-    if (currentSeq) {
-      currentSeq.preset_name = name;
-      await callLua('save_preset_to_sequence', { sequence: currentSeq });
+    if (!editingPreset || !editingPreset.name) {
+      return alert('Pick a preset to edit (or create a new one) first');
     }
-    await refreshPresetList();
-    updateActiveLabels();
-    document.getElementById('last-output').textContent = 'preset saved: ' + name;
+    readControlsIntoEditingPreset();
+    try {
+      await callLua('save_preset', { name: editingPreset.name, sequence: editingPreset });
+      editingPresetDirty = false;
+      updateDirtyBadge();
+      document.getElementById('last-output').textContent = 'preset saved: ' + editingPreset.name;
+    } catch (e) { alert('save failed: ' + e.message); }
   });
 
   document.getElementById('btn-preset-duplicate').addEventListener('click', async () => {
-    const src = document.getElementById('preset-select-edit').value
-             || (currentSeq && currentSeq.preset_name);
+    const src = (editingPreset && editingPreset.name)
+             || document.getElementById('preset-select-edit').value;
     if (!src) return alert('Pick a preset to duplicate first');
     const dest = prompt('New name for duplicate of "' + src + '":', src + '-copy');
     if (!dest) return;
@@ -520,36 +635,28 @@
       if (r && r.error) return alert('duplicate failed: ' + r.error);
       await refreshPresetList();
       document.getElementById('preset-select-edit').value = dest.trim();
-      document.getElementById('preset-select').value = dest.trim();
+      // Switch editor to the new copy.
+      const p = await callLua('get_preset', { name: dest.trim() });
+      editingPreset = Object.assign({ name: dest.trim() }, p);
+      editingPresetDirty = false;
+      applyEditingPresetToControls();
+      updateDirtyBadge();
       document.getElementById('last-output').textContent = 'duplicated: ' + src + ' → ' + dest;
     } catch (e) { alert('duplicate failed: ' + e.message); }
   });
 
-  // Viewport
+  // Viewport — mark editing preset dirty on change.
   document.getElementById('vp-preset').addEventListener('change', (e) => {
     const opt = e.target.selectedOptions[0];
     if (opt.dataset.w) document.getElementById('vp-w').value = opt.dataset.w;
     if (opt.dataset.h) document.getElementById('vp-h').value = opt.dataset.h;
-    autoSavePreset();
+    markEditingDirty();
   });
-
-  ['overlay-shift-x', 'overlay-shift-y'].forEach((id) => {
-    document.getElementById(id).addEventListener('change', async () => {
-      readShiftFromUI();
-      autoSavePreset();
-      if (currentSeq && currentSeq.viewport && currentSeq.viewport.region) {
-        const r = currentSeq.viewport.region;
-        const sh = currentSeq.viewport.overlay_shift || { dx: 0, dy: 0 };
-        if (!currentSeq.viewport._region_base) {
-          currentSeq.viewport._region_base = { x: r.x - sh.dx, y: r.y - sh.dy, w: r.w, h: r.h };
-        }
-        const base = currentSeq.viewport._region_base;
-        currentSeq.viewport.region = { x: base.x + sh.dx, y: base.y + sh.dy, w: base.w, h: base.h };
-        const rr = currentSeq.viewport.region;
-        document.getElementById('vp-region').textContent = `region: ${rr.x},${rr.y} ${rr.w}×${rr.h}`;
-      }
-      callLua('show_overlay', { shift: currentSeq && currentSeq.viewport.overlay_shift }).catch(() => {});
-    });
+  ['vp-w', 'vp-h', 'overlay-shift-x', 'overlay-shift-y'].forEach((id) => {
+    document.getElementById(id).addEventListener('change', markEditingDirty);
+  });
+  document.querySelectorAll('input[name=vp-mode]').forEach((r) => {
+    r.addEventListener('change', markEditingDirty);
   });
 
   // Recording
@@ -564,20 +671,12 @@
     document.getElementById('last-output').textContent = 'continuing recording (append)';
   });
 
-  // Playback / Output — auto-save preset on any change
-  document.getElementById('auto-path').addEventListener('change', () => {
-    readPlaybackFromUI(); renderTimeline(); autoSavePreset();
-  });
-  ['click-effects', 'show-keystrokes', 'pre-delay-ms', 'post-delay-ms',
-   'auto-path-pps', 'auto-path-easing']
-    .forEach((id) => document.getElementById(id).addEventListener('change', () => {
-      readPlaybackFromUI(); autoSavePreset();
-    }));
-  ['auto-crop-universal', 'auto-rescale', 'rescale-w', 'rescale-h',
+  // Playback / Output — mark dirty (no auto-save).
+  ['auto-path', 'click-effects', 'show-keystrokes', 'pre-delay-ms', 'post-delay-ms',
+   'auto-path-pps', 'auto-path-easing',
+   'auto-crop-universal', 'auto-rescale', 'rescale-w', 'rescale-h',
    'rescale-yt-w', 'rescale-yt-h', 'rescale-rl-w', 'rescale-rl-h']
-    .forEach((id) => document.getElementById(id).addEventListener('change', () => {
-      readOutputFromUI(); autoSavePreset();
-    }));
+    .forEach((id) => document.getElementById(id).addEventListener('change', markEditingDirty));
 
   document.getElementById('btn-apply-auto').addEventListener('click', async () => {
     if (!currentSeq) return;
@@ -604,16 +703,17 @@
     renderTimeline();
   });
 
+  // For Play/Capture, use the currentSeq as-is (which carries the linked
+  // preset's settings). Don't read from the preset-tab UI controls — they're
+  // for editing presets, NOT for live playback overrides.
   document.getElementById('btn-play').addEventListener('click', async () => {
     if (!currentSeq) return;
-    readAllFromUI();
     await callLua('set_active_sequence', { sequence: currentSeq });
     callLua('play', { sequence: currentSeq });
   });
 
   document.getElementById('btn-capture').addEventListener('click', async () => {
     if (!currentSeq) return;
-    readAllFromUI();
     await callLua('set_active_sequence', { sequence: currentSeq });
     const r = await callLua('capture_and_play', {});
     if (r.error) alert(r.error);
@@ -623,10 +723,19 @@
   // ─── Tabs ──────────────────────────────────────────────────────
   document.querySelectorAll('.tab-btn').forEach((btn) => {
     btn.addEventListener('click', async () => {
+      // Block tab-switch away from Preset Settings with unsaved changes.
+      const goingTo = btn.dataset.tab;
+      const currentTabBtn = document.querySelector('.tab-btn.active');
+      if (currentTabBtn && currentTabBtn.dataset.tab === 'preset' && goingTo !== 'preset') {
+        if (!confirmDiscardDirty()) return;
+      }
       document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b === btn));
-      const tab = btn.dataset.tab;
-      document.querySelectorAll('.tab').forEach(t => t.hidden = t.dataset.tab !== tab);
-      if (tab === 'manage') await renderManagePane();
+      document.querySelectorAll('.tab').forEach(t => t.hidden = t.dataset.tab !== goingTo);
+      if (goingTo === 'manage') await renderManagePane();
+      if (goingTo === 'preset' && !editingPreset) {
+        // If nothing being edited, show defaults so controls are visible.
+        applyEditingPresetToControls();
+      }
     });
   });
 
@@ -712,11 +821,13 @@
         currentSeq = active.sequence;
         const sel = document.getElementById('seq-select');
         if ([...sel.options].some(o => o.value === active.name)) sel.value = active.name;
-        applySeqToUI(); renderTimeline(); updateActiveLabels();
+        renderTimeline(); updateActiveLabels();
         if (currentSeq.preset_name) {
           document.getElementById('preset-select').value = currentSeq.preset_name;
-          document.getElementById('preset-select-edit').value = currentSeq.preset_name;
+          activePresetName = currentSeq.preset_name;
         }
+        // Preset-select-edit stays empty until user picks one to edit.
+        updateDirtyBadge();
       }
     } catch (_) {}
     pollPushLoop();

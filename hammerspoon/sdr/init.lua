@@ -211,6 +211,15 @@ local function register_handlers()
     return store.list_presets()
   end)
 
+  -- Read a preset's content without touching current_seq. For the Preset
+  -- Settings tab, which is decoupled from playback/capture state.
+  ui.register('get_preset', function(payload)
+    if not payload or not payload.name then return { error = 'name required' } end
+    local p = store.load_preset(payload.name)
+    if not p then return { error = 'not found' } end
+    return p
+  end)
+
   ui.register('apply_preset', function(payload)
     if not payload or not payload.name then return { error = 'preset name required' } end
     local preset = store.load_preset(payload.name)
