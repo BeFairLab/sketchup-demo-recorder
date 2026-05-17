@@ -54,13 +54,24 @@ end
 -- presets. Sizes in LOGICAL POINTS (= pixels / retina_scale). Centered inside
 -- the recording region.
 local function safe_frames_for(vp)
-  if not vp or vp.preset ~= 'universal_2160' then return nil end
-  -- Built-in retina = 2. Universal source = 2160×2160 px = 1080×1080 pt.
-  -- YouTube 1920×1080 px = 960×540 pt. Reels 1080×1920 px = 540×960 pt.
-  return {
-    { name = 'YouTube 16:9', w = 960, h = 540, color = { 1.0, 0.85, 0.20 } },
-    { name = 'Reels 9:16',   w = 540, h = 960, color = { 1.0, 0.35, 0.35 } },
-  }
+  if not vp then return nil end
+  -- Retina = 2 on built-in display; converts px → pt for canvas sizing.
+  if vp.preset == 'universal_2160' then
+    -- Source 2160×2160 px = 1080×1080 pt.
+    -- YouTube 1920×1080 px = 960×540 pt. Reels 1080×1920 px = 540×960 pt.
+    return {
+      { name = 'YouTube 16:9', w = 960, h = 540, color = { 1.0, 0.85, 0.20 } },
+      { name = 'Reels 9:16',   w = 540, h = 960, color = { 1.0, 0.35, 0.35 } },
+    }
+  elseif vp.preset == 'universal_2880' then
+    -- Source 2880×2880 px = 1440×1440 pt.
+    -- YouTube 1.5× 2880×1620 px = 1440×810 pt. Reels 1.5× 1620×2880 px = 810×1440 pt.
+    return {
+      { name = 'YouTube 1.5× 16:9', w = 1440, h = 810,  color = { 1.0, 0.85, 0.20 } },
+      { name = 'Reels 1.5× 9:16',   w = 810,  h = 1440, color = { 1.0, 0.35, 0.35 } },
+    }
+  end
+  return nil
 end
 
 -- Auto-load the last-used sequence on boot. Silent if missing.
