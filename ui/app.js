@@ -2,41 +2,36 @@
 // hs.webview navigationCallback. Lua responds via window.SDR_BRIDGE_RESPONSE().
 
 (function () {
-  const responsePromises = {};
-  let reqCounter = 0;
+  const PORT = window.SDR_PORT;
+  const BASE = 'http://127.0.0.1:' + PORT;
 
-  function callLua(handler, payload) {
-    return new Promise((resolve, reject) => {
-      const reqid = 'r' + (++reqCounter);
-      payload = Object.assign({}, payload || {}, { reqid });
-      responsePromises[reqid] = { resolve, reject };
-      const enc = encodeURIComponent(JSON.stringify(payload));
-      // Navigate the page to a fake URL — intercepted by Lua.
-      window.location.href = 'sdr://' + handler + '?' + enc;
-    });
+  async function callLua(handler, payload) {
+    const p = encodeURIComponent(JSON.stringify(payload || {}));
+    const resp = await fetch(BASE + '/call/' + handler + '?p=' + p);
+    const data = await resp.json();
+    if (data.ok) return data.result;
+    throw new Error(typeof data.result === 'string' ? data.result : JSON.stringify(data.result));
   }
 
-  // Lua calls this when it has a result for a previous call.
-  window.SDR_BRIDGE_RESPONSE = function (reqid, jsonStr) {
-    const pending = responsePromises[reqid];
-    if (!pending) return;
-    delete responsePromises[reqid];
-    try {
-      const parsed = JSON.parse(jsonStr);
-      if (parsed.ok) pending.resolve(parsed.result);
-      else pending.reject(parsed.result);
-    } catch (e) {
-      pending.reject(e);
+  // Long-poll for push events from Lua.
+  async function pollPushLoop() {
+    while (true) {
+      try {
+        const resp = await fetch(BASE + '/push');
+        const data = await resp.json();
+        (data.events || []).forEach((ev) => {
+          const fn = pushHandlers[ev.name];
+          if (fn) fn(ev.data || {});
+        });
+      } catch (e) {
+        // backoff on error
+        await new Promise(r => setTimeout(r, 1000));
+        continue;
+      }
+      // small gap before re-poll
+      await new Promise(r => setTimeout(r, 250));
     }
-  };
-
-  // Lua pushes async events (status, replay progress, etc).
-  window.SDR_PUSH = function (eventName, jsonStr) {
-    let data = {};
-    try { data = JSON.parse(jsonStr); } catch (_) {}
-    const fn = pushHandlers[eventName];
-    if (fn) fn(data);
-  };
+  }
 
   const pushHandlers = {
     status: (d) => {
@@ -248,4 +243,5 @@
 
   // ─── Init ──────────────────────────────────────────────────────
   refreshSequenceList();
+  pollPushLoop();
 })();

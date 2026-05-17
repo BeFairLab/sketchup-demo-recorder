@@ -262,6 +262,8 @@ function M.start(opts)
   register_handlers()
   bind_hotkeys()
   build_menubar()
+  -- Start the HTTP bridge so UI can talk to Lua. Port is auto-assigned.
+  ui.start(config.repo_root)
   set_status('idle')
 
   hs.printf('SDR started. Repo: %s   Sequences: %s', config.repo_root, seq_dir)
