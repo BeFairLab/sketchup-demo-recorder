@@ -1,5 +1,4 @@
-// app.js — webview client. POST /call/<handler> with JSON body to invoke Lua.
-// Lua pushes events via /push long-poll.
+// app.js — webview client. POST /call/<handler> with JSON body.
 
 (function () {
   const PORT = window.SDR_PORT;
@@ -63,15 +62,17 @@
   let currentSeq = null;
 
   function updateActiveLabels() {
-    const pa = document.getElementById('preset-active');
-    const ta = document.getElementById('timeline-active');
-    pa.textContent = currentSeq && currentSeq.preset_name ? currentSeq.preset_name : '— none —';
-    ta.textContent = currentSeq && currentSeq.name ? currentSeq.name : '— none —';
-    const linkText = document.getElementById('timeline-preset-link');
-    if (currentSeq && currentSeq.preset_name) {
-      linkText.textContent = `Linked preset: ${currentSeq.preset_name} (auto-loads on timeline open)`;
-    } else {
-      linkText.textContent = 'No preset linked to this timeline.';
+    document.getElementById('preset-active').textContent =
+      currentSeq && currentSeq.preset_name ? currentSeq.preset_name : '— none —';
+    document.getElementById('timeline-active').textContent =
+      currentSeq && currentSeq.name ? currentSeq.name : '— none —';
+    const link = document.getElementById('timeline-preset-link');
+    if (link) {
+      if (currentSeq && currentSeq.preset_name) {
+        link.textContent = `Linked preset: ${currentSeq.preset_name} (loads automatically with this timeline)`;
+      } else {
+        link.textContent = 'No preset linked to this timeline.';
+      }
     }
   }
 
@@ -84,6 +85,7 @@
       const opt = document.createElement('option');
       opt.value = name; opt.textContent = name; sel.appendChild(opt);
     });
+    if (currentSeq && currentSeq.name) sel.value = currentSeq.name;
   }
 
   async function refreshPresetList() {
@@ -94,16 +96,36 @@
       const o = document.createElement('option'); o.value = n; o.textContent = n;
       sel.appendChild(o);
     });
+    if (currentSeq && currentSeq.preset_name) sel.value = currentSeq.preset_name;
   }
 
   async function loadSequence(name) {
     if (!name) return;
     const seq = await callLua('load_sequence', { name });
     currentSeq = seq;
-    document.getElementById('seq-name').value = name;
     applySeqToUI();
     renderTimeline();
     updateActiveLabels();
+    // Reflect linked preset in dropdown.
+    if (seq.preset_name) {
+      document.getElementById('preset-select').value = seq.preset_name;
+      document.getElementById('preset-name').value = seq.preset_name;
+    }
+  }
+
+  async function loadPresetIntoCurrentSeq(name) {
+    if (!name || !currentSeq) return;
+    const r = await callLua('apply_preset', { name });
+    if (r.error) return alert(r.error);
+    if (r.mismatch) {
+      if (!confirm('Warning: ' + r.mismatch + '\n\nApply anyway?')) return;
+    }
+    currentSeq = r.sequence;
+    applySeqToUI();
+    renderTimeline();
+    updateActiveLabels();
+    document.getElementById('preset-name').value = name;
+    document.getElementById('last-output').textContent = 'preset loaded: ' + name;
   }
 
   function applySeqToUI() {
@@ -154,7 +176,6 @@
     currentSeq.viewport.preset = preset;
     currentSeq.viewport.width = width;
     currentSeq.viewport.height = height;
-    return currentSeq.viewport;
   }
 
   function readPlaybackFromUI() {
@@ -198,17 +219,33 @@
     readOutputFromUI();
   }
 
+  // ─── Auto-save preset settings (viewport + playback + output) ──
+  // Triggered when user changes any preset-tab control. Persists to disk
+  // under the active preset name. If no preset name is set, prompts once.
+  let _autoSaveDebounce = null;
+  function autoSavePreset() {
+    readAllFromUI();
+    if (!currentSeq) return;
+    if (!currentSeq.preset_name) return; // no active preset → silent skip
+    clearTimeout(_autoSaveDebounce);
+    _autoSaveDebounce = setTimeout(async () => {
+      try {
+        await callLua('save_preset', { name: currentSeq.preset_name, sequence: currentSeq });
+        // Also update the timeline so its linked preset_name stays in sync.
+        await callLua('save_preset_to_sequence', { sequence: currentSeq });
+      } catch (e) { console.warn('autoSavePreset:', e.message); }
+    }, 400);
+  }
+
   // ─── Timeline ──────────────────────────────────────────────────
   function totalDurationMs(seq) {
     const pb = seq.playback || {};
     const ap = pb.auto_path === true;
     const pps = pb.auto_path_pps || 1000;
-    let total = 0;
-    let prev = null;
-    let inDrag = false;
+    let total = 0; let prev = null; let inDrag = false;
     for (const e of seq.events || []) {
       if (ap && e.type === 'mouse_move' && !inDrag) {
-        // skipped in replay
+        // skip
       } else {
         total += (e.pause_before_ms || 0);
         if (ap && (e.type === 'mouse_down' || e.type === 'mouse_up')) {
@@ -245,10 +282,8 @@
           pendingMoves.pause += (evt.pause_before_ms || 0);
         } else {
           if (pendingMoves) {
-            displayEvents.push({
-              _synthetic: true, type: 'auto_path',
-              count: pendingMoves.count, pause_before_ms: pendingMoves.pause,
-            });
+            displayEvents.push({ _synthetic: true, type: 'auto_path',
+              count: pendingMoves.count, pause_before_ms: pendingMoves.pause });
             pendingMoves = null;
           }
           displayEvents.push(evt);
@@ -267,9 +302,7 @@
       const pauseChip = document.createElement('span');
       pauseChip.className = 'chip pause';
       const pauseInput = document.createElement('input');
-      pauseInput.type = 'number';
-      pauseInput.value = evt.pause_before_ms || 0;
-      pauseInput.min = 0;
+      pauseInput.type = 'number'; pauseInput.value = evt.pause_before_ms || 0; pauseInput.min = 0;
       pauseInput.addEventListener('change', () => {
         evt.pause_before_ms = parseInt(pauseInput.value, 10) || 0;
         renderTimeline();
@@ -309,107 +342,12 @@
     });
   }
 
-  // ─── Editor bindings ───────────────────────────────────────────
-  document.getElementById('seq-select').addEventListener('change', (e) => loadSequence(e.target.value));
-
-  document.getElementById('btn-new').addEventListener('click', async () => {
-    const name = document.getElementById('seq-name').value.trim();
-    if (!name) return alert('enter a name');
-    try {
-      currentSeq = await callLua('new_sequence', { name });
-      applySeqToUI(); renderTimeline(); updateActiveLabels();
-      refreshSequenceList();
-      document.getElementById('last-output').textContent = 'created timeline: ' + name;
-    } catch (e) { alert('new_sequence failed: ' + e.message); }
-  });
-
-  document.getElementById('btn-load').addEventListener('click', () => {
-    const name = document.getElementById('seq-name').value.trim();
-    if (name) loadSequence(name);
-  });
-
-  document.getElementById('btn-save-timeline').addEventListener('click', async () => {
-    if (!currentSeq) return;
-    await callLua('save_timeline', { sequence: currentSeq });
-    document.getElementById('last-output').textContent = 'saved timeline ' + currentSeq.name;
-  });
-
-  document.getElementById('btn-save-preset-to-seq').addEventListener('click', async () => {
-    if (!currentSeq) return;
-    readAllFromUI();
-    await callLua('save_preset_to_sequence', { sequence: currentSeq });
-    document.getElementById('last-output').textContent = 'saved preset → timeline ' + currentSeq.name;
-  });
-
-  document.getElementById('btn-ping').addEventListener('click', async () => {
-    const r = await callLua('ping_companion', {});
-    document.getElementById('last-output').textContent = JSON.stringify(r);
-  });
-
-  // Preset section
-  document.getElementById('preset-select').addEventListener('change', (e) => {
-    document.getElementById('preset-name').value = e.target.value;
-  });
-
-  document.getElementById('btn-preset-new').addEventListener('click', async () => {
-    const name = document.getElementById('preset-name').value.trim();
-    if (!name) return alert('enter preset name');
-    if (!currentSeq) return alert('have an active timeline first');
-    readAllFromUI();
-    await callLua('save_preset', { name, sequence: currentSeq });
-    await refreshPresetList();
-    document.getElementById('last-output').textContent = 'preset created: ' + name;
-  });
-
-  document.getElementById('btn-preset-load').addEventListener('click', async () => {
-    const name = document.getElementById('preset-name').value.trim() ||
-                 document.getElementById('preset-select').value;
-    if (!name || !currentSeq) return;
-    const r = await callLua('apply_preset', { name });
-    if (r.error) return alert(r.error);
-    if (r.mismatch) alert('Warning: ' + r.mismatch);
-    currentSeq = r.sequence;
-    applySeqToUI(); renderTimeline(); updateActiveLabels();
-    document.getElementById('last-output').textContent = 'preset loaded: ' + name;
-  });
-
-  document.getElementById('btn-preset-save').addEventListener('click', async () => {
-    if (!currentSeq) return;
-    const name = document.getElementById('preset-name').value.trim() || currentSeq.preset_name;
-    if (!name) return alert('preset name required');
-    readAllFromUI();
-    await callLua('save_preset', { name, sequence: currentSeq });
-    currentSeq.preset_name = name;
-    updateActiveLabels();
-    await refreshPresetList();
-    document.getElementById('last-output').textContent = 'preset saved: ' + name;
-  });
-
-  document.getElementById('btn-preset-duplicate').addEventListener('click', async () => {
-    const src = document.getElementById('preset-select').value
-             || document.getElementById('preset-name').value.trim();
-    if (!src) return alert('Pick a preset in the dropdown or type its name first');
-    const dest = prompt('New name for duplicate:', src + '-copy');
-    if (!dest) return;
-    try {
-      const r = await callLua('duplicate_preset', { src, dest });
-      if (r && r.error) return alert('duplicate failed: ' + r.error);
-      await refreshPresetList();
-      document.getElementById('preset-name').value = dest;
-      document.getElementById('preset-select').value = dest;
-      document.getElementById('last-output').textContent = 'duplicated: ' + src + ' → ' + dest;
-    } catch (e) {
-      alert('duplicate failed: ' + e.message);
-    }
-  });
-
-  // (btn-preset-apply removed — Load already applies preset to current timeline)
-
-  // Viewport
-  document.getElementById('vp-preset').addEventListener('change', (e) => {
-    const opt = e.target.selectedOptions[0];
-    if (opt.dataset.w) document.getElementById('vp-w').value = opt.dataset.w;
-    if (opt.dataset.h) document.getElementById('vp-h').value = opt.dataset.h;
+  // ─── Header (top card) ─────────────────────────────────────────
+  document.getElementById('preset-select').addEventListener('change', async (e) => {
+    const name = e.target.value;
+    if (!name) return;
+    document.getElementById('preset-name').value = name;
+    if (currentSeq) await loadPresetIntoCurrentSeq(name);
   });
 
   document.getElementById('btn-apply-vp').addEventListener('click', async () => {
@@ -432,22 +370,106 @@
   document.getElementById('btn-show-overlay').addEventListener('click', () => callLua('show_overlay', {}));
   document.getElementById('btn-hide-overlay').addEventListener('click', () => callLua('hide_overlay', {}));
 
+  // ─── Timeline tab ──────────────────────────────────────────────
+  document.getElementById('seq-select').addEventListener('change', (e) => loadSequence(e.target.value));
+
+  // New = prompt → create → save immediately
+  document.getElementById('btn-new').addEventListener('click', async () => {
+    const name = prompt('Timeline name:');
+    if (!name) return;
+    try {
+      currentSeq = await callLua('new_sequence', { name: name.trim() });
+      applySeqToUI(); renderTimeline(); updateActiveLabels();
+      // Immediately persist so refresh shows it.
+      await callLua('save_timeline', { sequence: currentSeq });
+      await refreshSequenceList();
+      document.getElementById('last-output').textContent = 'created + saved timeline: ' + name;
+    } catch (e) { alert('new failed: ' + e.message); }
+  });
+
+  document.getElementById('btn-save-timeline').addEventListener('click', async () => {
+    if (!currentSeq) return;
+    await callLua('save_timeline', { sequence: currentSeq });
+    document.getElementById('last-output').textContent = 'saved ' + currentSeq.name;
+  });
+
+  document.getElementById('btn-clear-timeline').addEventListener('click', async () => {
+    if (!currentSeq) return;
+    if (!confirm('Clear all events from "' + currentSeq.name + '"?')) return;
+    currentSeq.events = [];
+    renderTimeline();
+    await callLua('save_timeline', { sequence: currentSeq });
+    document.getElementById('last-output').textContent = 'cleared events';
+  });
+
+  // ─── Preset tab ────────────────────────────────────────────────
+  // New preset = prompt → write current settings to <name>.json
+  document.getElementById('btn-preset-new').addEventListener('click', async () => {
+    if (!currentSeq) return alert('load a timeline first');
+    const name = prompt('Preset name:');
+    if (!name) return;
+    readAllFromUI();
+    try {
+      await callLua('save_preset', { name: name.trim(), sequence: currentSeq });
+      currentSeq.preset_name = name.trim();
+      await callLua('save_preset_to_sequence', { sequence: currentSeq });
+      await refreshPresetList();
+      document.getElementById('preset-name').value = name;
+      document.getElementById('preset-select').value = name;
+      updateActiveLabels();
+      document.getElementById('last-output').textContent = 'created + saved preset: ' + name;
+    } catch (e) { alert('preset new failed: ' + e.message); }
+  });
+
+  document.getElementById('btn-preset-save').addEventListener('click', async () => {
+    if (!currentSeq) return;
+    readAllFromUI();
+    const name = document.getElementById('preset-name').value.trim() || currentSeq.preset_name;
+    if (!name) return alert('preset name required (or pick one)');
+    await callLua('save_preset', { name, sequence: currentSeq });
+    currentSeq.preset_name = name;
+    await callLua('save_preset_to_sequence', { sequence: currentSeq });
+    await refreshPresetList();
+    updateActiveLabels();
+    document.getElementById('last-output').textContent = 'preset saved: ' + name;
+  });
+
+  document.getElementById('btn-preset-duplicate').addEventListener('click', async () => {
+    const src = document.getElementById('preset-select').value
+             || document.getElementById('preset-name').value.trim();
+    if (!src) return alert('Pick a preset or type its name first');
+    const dest = prompt('New name for duplicate:', src + '-copy');
+    if (!dest) return;
+    try {
+      const r = await callLua('duplicate_preset', { src, dest: dest.trim() });
+      if (r && r.error) return alert('duplicate failed: ' + r.error);
+      await refreshPresetList();
+      document.getElementById('preset-name').value = dest;
+      document.getElementById('preset-select').value = dest;
+      document.getElementById('last-output').textContent = 'duplicated: ' + src + ' → ' + dest;
+    } catch (e) { alert('duplicate failed: ' + e.message); }
+  });
+
+  // Viewport
+  document.getElementById('vp-preset').addEventListener('change', (e) => {
+    const opt = e.target.selectedOptions[0];
+    if (opt.dataset.w) document.getElementById('vp-w').value = opt.dataset.w;
+    if (opt.dataset.h) document.getElementById('vp-h').value = opt.dataset.h;
+    autoSavePreset();
+  });
+
   ['overlay-shift-x', 'overlay-shift-y'].forEach((id) => {
     document.getElementById(id).addEventListener('change', async () => {
       readShiftFromUI();
-      // Recompute region with the new shift (so capture uses it too) then
-      // re-show overlay at the same place.
+      autoSavePreset();
       if (currentSeq && currentSeq.viewport && currentSeq.viewport.region) {
         const r = currentSeq.viewport.region;
         const sh = currentSeq.viewport.overlay_shift || { dx: 0, dy: 0 };
-        // Shift relative to baseline: store baseline once if absent.
         if (!currentSeq.viewport._region_base) {
           currentSeq.viewport._region_base = { x: r.x - sh.dx, y: r.y - sh.dy, w: r.w, h: r.h };
         }
         const base = currentSeq.viewport._region_base;
-        currentSeq.viewport.region = {
-          x: base.x + sh.dx, y: base.y + sh.dy, w: base.w, h: base.h,
-        };
+        currentSeq.viewport.region = { x: base.x + sh.dx, y: base.y + sh.dy, w: base.w, h: base.h };
         const rr = currentSeq.viewport.region;
         document.getElementById('vp-region').textContent = `region: ${rr.x},${rr.y} ${rr.w}×${rr.h}`;
       }
@@ -467,25 +489,28 @@
     document.getElementById('last-output').textContent = 'continuing recording (append)';
   });
 
-  // Playback toggles
+  // Playback / Output — auto-save preset on any change
   document.getElementById('auto-path').addEventListener('change', () => {
-    readPlaybackFromUI(); renderTimeline();
+    readPlaybackFromUI(); renderTimeline(); autoSavePreset();
   });
-  ['click-effects', 'show-keystrokes', 'pre-delay-ms', 'post-delay-ms', 'auto-path-pps', 'auto-path-easing']
-    .forEach((id) => document.getElementById(id).addEventListener('change', readPlaybackFromUI));
+  ['click-effects', 'show-keystrokes', 'pre-delay-ms', 'post-delay-ms',
+   'auto-path-pps', 'auto-path-easing']
+    .forEach((id) => document.getElementById(id).addEventListener('change', () => {
+      readPlaybackFromUI(); autoSavePreset();
+    }));
   ['auto-crop-universal', 'auto-rescale', 'rescale-w', 'rescale-h',
    'rescale-yt-w', 'rescale-yt-h', 'rescale-rl-w', 'rescale-rl-h']
-    .forEach((id) => document.getElementById(id).addEventListener('change', readOutputFromUI));
+    .forEach((id) => document.getElementById(id).addEventListener('change', () => {
+      readOutputFromUI(); autoSavePreset();
+    }));
 
   document.getElementById('btn-apply-auto').addEventListener('click', async () => {
     if (!currentSeq) return;
     const events = currentSeq.events || [];
-    const out = [];
-    let pendingPause = 0;
+    const out = []; let pendingPause = 0;
     for (const e of events) {
-      if (e.type === 'mouse_move') {
-        pendingPause += (e.pause_before_ms || 0);
-      } else {
+      if (e.type === 'mouse_move') pendingPause += (e.pause_before_ms || 0);
+      else {
         const clone = Object.assign({}, e);
         clone.pause_before_ms = (clone.pause_before_ms || 0) + pendingPause;
         pendingPause = 0;
@@ -507,6 +532,7 @@
   document.getElementById('btn-play').addEventListener('click', async () => {
     if (!currentSeq) return;
     readAllFromUI();
+    await callLua('set_active_sequence', { sequence: currentSeq });
     callLua('play', { sequence: currentSeq });
   });
 
@@ -550,14 +576,12 @@
     const row = document.createElement('div');
     row.className = 'manage-row';
     const nm = document.createElement('span');
-    nm.className = 'name';
-    nm.textContent = name;
+    nm.className = 'name'; nm.textContent = name;
     row.appendChild(nm);
 
     if (kind === 'timeline' && info) {
       const meta = document.createElement('span');
-      meta.className = 'muted';
-      meta.style.fontSize = '11px';
+      meta.className = 'muted'; meta.style.fontSize = '11px';
       meta.textContent = `(${info.events} events, preset: ${info.preset_name || '—'})`;
       row.appendChild(meta);
     }
@@ -565,14 +589,13 @@
     const renameBtn = document.createElement('button');
     renameBtn.textContent = 'Rename';
     renameBtn.addEventListener('click', async () => {
-      const next = prompt('New name for ' + name + ':', name);
+      const next = prompt('New name:', name);
       if (!next || next === name) return;
       const handler = kind === 'preset' ? 'rename_preset' : 'rename_sequence';
       const r = await callLua(handler, { old: name, new: next });
       if (r.error) return alert(r.error);
       await renderManagePane();
-      if (kind === 'timeline') await refreshSequenceList();
-      else await refreshPresetList();
+      if (kind === 'timeline') await refreshSequenceList(); else await refreshPresetList();
     });
     row.appendChild(renameBtn);
 
@@ -586,20 +609,23 @@
     row.appendChild(exportBtn);
 
     const delBtn = document.createElement('button');
-    delBtn.className = 'danger';
-    delBtn.textContent = 'Delete';
+    delBtn.className = 'danger'; delBtn.textContent = 'Delete';
     delBtn.addEventListener('click', async () => {
       if (!confirm('Delete ' + kind + ' "' + name + '"?')) return;
       const handler = kind === 'preset' ? 'delete_preset' : 'delete_sequence';
       await callLua(handler, { name });
       await renderManagePane();
-      if (kind === 'timeline') await refreshSequenceList();
-      else await refreshPresetList();
+      if (kind === 'timeline') await refreshSequenceList(); else await refreshPresetList();
     });
     row.appendChild(delBtn);
 
     return row;
   }
+
+  document.getElementById('btn-ping') && document.getElementById('btn-ping').addEventListener('click', async () => {
+    const r = await callLua('ping_companion', {});
+    document.getElementById('last-output').textContent = JSON.stringify(r);
+  });
 
   // ─── Init ──────────────────────────────────────────────────────
   (async () => {
@@ -609,14 +635,13 @@
       const active = await callLua('get_active_sequence', {});
       if (active && active.name && active.sequence) {
         currentSeq = active.sequence;
-        document.getElementById('seq-name').value = active.name;
         const sel = document.getElementById('seq-select');
-        if ([...sel.options].some(o => o.value === active.name)) {
-          sel.value = active.name;
+        if ([...sel.options].some(o => o.value === active.name)) sel.value = active.name;
+        applySeqToUI(); renderTimeline(); updateActiveLabels();
+        if (currentSeq.preset_name) {
+          document.getElementById('preset-select').value = currentSeq.preset_name;
+          document.getElementById('preset-name').value = currentSeq.preset_name;
         }
-        applySeqToUI();
-        renderTimeline();
-        updateActiveLabels();
       }
     } catch (_) {}
     pollPushLoop();

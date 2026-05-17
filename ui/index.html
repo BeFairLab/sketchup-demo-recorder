@@ -14,34 +14,18 @@
     </div>
   </header>
 
-  <!-- Always-visible top: sequence + preset selectors -->
+  <!-- Simplified header — only preset picker + Apply + overlay toggles -->
   <section class="card">
-    <div class="row">
-      <label>Timeline
-        <select id="seq-select"></select>
-      </label>
-      <input id="seq-name" placeholder="timeline-name">
-      <button id="btn-new">New</button>
-      <button id="btn-load">Load</button>
-      <button id="btn-save-timeline">Save timeline</button>
-      <span class="muted">active: <span id="timeline-active">— none —</span></span>
-    </div>
     <div class="row">
       <label>Preset
         <select id="preset-select"></select>
       </label>
-      <input id="preset-name" placeholder="preset-name">
-      <button id="btn-preset-new">New</button>
-      <button id="btn-preset-load">Load</button>
-      <button id="btn-preset-save">Save</button>
-      <button id="btn-preset-duplicate">Duplicate</button>
-      <button id="btn-save-preset-to-seq">Save preset → timeline</button>
-      <span class="muted">active: <span id="preset-active">— none —</span></span>
+      <button id="btn-apply-vp" class="primary">Apply to SketchUp</button>
+      <button id="btn-show-overlay">Show overlay</button>
+      <button id="btn-hide-overlay">Hide overlay</button>
+      <span class="muted">active timeline: <span id="timeline-active">— none —</span></span>
     </div>
-    <div class="row">
-      <span class="muted" id="timeline-preset-link"></span>
-      <button id="btn-ping">Ping companion</button>
-    </div>
+    <div id="vp-region" class="muted">region: not set</div>
   </section>
 
   <nav class="tabs">
@@ -54,6 +38,17 @@
   <!-- ─── TIMELINE TAB ───────────────────────────────────── -->
   <div class="tab" data-tab="timeline">
     <section class="card">
+      <div class="row">
+        <label>Timeline
+          <select id="seq-select"></select>
+        </label>
+        <button id="btn-new">New… (prompt + save)</button>
+        <button id="btn-save-timeline">Save changes</button>
+        <button id="btn-clear-timeline" class="danger-btn">Clear events</button>
+      </div>
+    </section>
+
+    <section class="card">
       <h2>Timeline events <span id="timeline-meta" class="muted"></span></h2>
       <div class="row">
         <button id="btn-play">▶ Play (no capture)</button>
@@ -63,6 +58,7 @@
       </div>
       <div id="timeline" class="timeline"></div>
     </section>
+
     <section class="card">
       <h2>Last output</h2>
       <div id="last-output" class="muted">—</div>
@@ -78,7 +74,7 @@
         <button id="btn-rec-continue">↻ Continue recording</button>
       </div>
       <div class="row">
-        <span class="muted">Hotkeys: ⌃⌥⌘R fresh · ⌃⌥⌘E continue · ⌃⌥⌘P play · ⌃⌥⌘V toggle UI</span>
+        <span class="muted">⌃⌥⌘R fresh · ⌃⌥⌘E continue · ⌃⌥⌘P play · ⌃⌥⌘V toggle UI</span>
       </div>
       <div class="row">
         <span id="rec-events" class="muted">0 events</span>
@@ -90,17 +86,30 @@
   <div class="tab" data-tab="preset" hidden>
 
     <section class="card">
+      <div class="row">
+        <span class="muted">Editing preset: <span id="preset-active">— none —</span></span>
+        <input id="preset-name" placeholder="preset-name">
+        <button id="btn-preset-new">New… (prompt + save)</button>
+        <button id="btn-preset-save">Save changes</button>
+        <button id="btn-preset-duplicate">Duplicate</button>
+      </div>
+      <div class="row">
+        <span class="muted" id="timeline-preset-link"></span>
+      </div>
+    </section>
+
+    <section class="card">
       <h2>Viewport</h2>
       <div class="row">
         <label><input type="radio" name="vp-mode" value="viewport" checked> Viewport (model area)</label>
         <label><input type="radio" name="vp-mode" value="window"> Window</label>
       </div>
       <div class="row">
-        <label>Preset
+        <label>Resolution preset
           <select id="vp-preset">
             <option value="youtube_1080p"  data-w="1920" data-h="1080">YouTube 1920×1080</option>
             <option value="fhd_1_5x"       data-w="2880" data-h="1620">FHD 1.5× 2880×1620</option>
-            <option value="youtube_4k"     data-w="3840" data-h="2160">YouTube 4K 3840×2160 (may not fit)</option>
+            <option value="youtube_4k"     data-w="3840" data-h="2160">YouTube 4K 3840×2160</option>
             <option value="reels_1080p"    data-w="1080" data-h="1920">Reels/TikTok 1080×1920</option>
             <option value="reels_1_5x"     data-w="1620" data-h="2880">Reels 1.5× 1620×2880</option>
             <option value="square_1080"    data-w="1080" data-h="1080">Square 1080×1080</option>
@@ -111,19 +120,15 @@
         </label>
         <label>W <input type="number" id="vp-w" value="1920" style="width:80px"></label>
         <label>H <input type="number" id="vp-h" value="1080" style="width:80px"></label>
-        <button id="btn-apply-vp">Apply to SketchUp</button>
-        <button id="btn-show-overlay">Show overlay</button>
-        <button id="btn-hide-overlay">Hide</button>
       </div>
-      <div id="vp-region" class="muted">region: not set</div>
       <div class="row">
-        <label>Overlay shift X
+        <label>Capture area shift X
           <input type="number" id="overlay-shift-x" value="0" step="1" style="width:70px">
         </label>
         <label>Y
           <input type="number" id="overlay-shift-y" value="0" step="1" style="width:70px">
         </label>
-        <span class="muted">applies to overlay AND capture region</span>
+        <span class="muted">nudges overlay + capture region together</span>
       </div>
     </section>
 
@@ -146,16 +151,18 @@
       </div>
       <div class="row">
         <label><input type="checkbox" id="click-effects"> Show click circles</label>
-        <label><input type="checkbox" id="show-keystrokes"> Show keystrokes (English, includes modifiers while held)</label>
+        <label><input type="checkbox" id="show-keystrokes"> Show keystrokes (English; includes modifier-only clicks)</label>
       </div>
       <div class="row">
         <label>Pre-delay
           <input type="number" id="pre-delay-ms" value="1000" min="0" step="100" style="width:90px">
-          <span class="muted">ms</span>
+          <span class="muted">ms BEFORE first event during play/capture (so SU has time to focus + screen-record buffers)</span>
         </label>
+      </div>
+      <div class="row">
         <label>Post-delay
           <input type="number" id="post-delay-ms" value="1000" min="0" step="100" style="width:90px">
-          <span class="muted">ms</span>
+          <span class="muted">ms AFTER last event before stopping capture (tail buffer in mp4)</span>
         </label>
       </div>
     </section>

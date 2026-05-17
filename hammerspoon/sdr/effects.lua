@@ -49,7 +49,10 @@ function M.click_dot(x, y, color)
     w = DOT_INITIAL_RADIUS * 2,
     h = DOT_INITIAL_RADIUS * 2,
   })
-  canvas:level('overlay')
+  -- 'screenSaver' is the highest user-level NSWindowLevel that screencapture
+  -- still includes. 'overlay' is the same in many builds but not all.
+  canvas:level(hs.canvas.windowLevels.screenSaver)
+  canvas:behavior({ 'canJoinAllSpaces', 'stationary' })
   canvas:appendElements({
     type = 'circle',
     action = 'strokeAndFill',
@@ -95,7 +98,8 @@ function M.show_keystroke(text, x, y)
   local w = math.max(36, math.floor(#text * KEY_FONT_SIZE * 0.62 + KEY_PADDING * 2 + 0.5))
   local h = KEY_FONT_SIZE + KEY_PADDING * 2
   ks_canvas = hs.canvas.new({ x = x, y = y, w = w, h = h })
-  ks_canvas:level('overlay')
+  ks_canvas:level(hs.canvas.windowLevels.screenSaver)
+  ks_canvas:behavior({ 'canJoinAllSpaces', 'stationary' })
   ks_canvas:appendElements({
     type = 'rectangle',
     action = 'fill',

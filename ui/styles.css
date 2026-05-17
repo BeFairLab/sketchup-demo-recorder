@@ -138,3 +138,5 @@ button.primary:hover { background: #006fe0; }
 }
 .manage-row .danger { color: #d70015; border-color: #d70015; }
 .manage-row .danger:hover { background: #ffe5e5; }
+.danger-btn { color: #d70015; border-color: #d70015; }
+.danger-btn:hover { background: #ffe5e5; }

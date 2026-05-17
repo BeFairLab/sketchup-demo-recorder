@@ -86,9 +86,15 @@ function M.start(region, output_path, seconds, on_done)
     end
   end
 
-  -- Round to integers (screencapture parses int).
+  -- Round to integers.
   region = { x = math.floor(region.x + 0.5), y = math.floor(region.y + 0.5),
              w = math.floor(region.w + 0.5), h = math.floor(region.h + 0.5) }
+
+  -- Sanity: refuse zero-sized or absurdly-large regions; screencapture would
+  -- silently capture the whole display if -R is malformed.
+  if region.w < 4 or region.h < 4 or region.w > 8000 or region.h > 8000 then
+    return false, 'region out of sane bounds: ' .. hs.inspect(region)
+  end
 
   seconds = math.max(2, math.floor(seconds + 0.5))
 
