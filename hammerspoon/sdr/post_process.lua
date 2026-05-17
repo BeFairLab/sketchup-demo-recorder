@@ -61,9 +61,11 @@ function M.split_universal(in_path, preset, opts, on_done)
   end
 
   -- Build adaptive filters: clamp target to source, center the crop.
+  -- ffmpeg filter syntax uses ',' as filter separator — escape with \\, inside
+  -- expressions so min() args parse correctly. (Lua \\, → on-disk \,)
   for _, c in ipairs(crops) do
-    local w_expr = string.format('min(iw,%d)', c.target_w)
-    local h_expr = string.format('min(ih,%d)', c.target_h)
+    local w_expr = string.format('min(iw\\,%d)', c.target_w)
+    local h_expr = string.format('min(ih\\,%d)', c.target_h)
     c.filter = string.format('crop=%s:%s:(iw-%s)/2:(ih-%s)/2',
       w_expr, h_expr, w_expr, h_expr)
   end
