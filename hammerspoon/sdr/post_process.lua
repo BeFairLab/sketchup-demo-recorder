@@ -42,15 +42,15 @@ end
 function M.split_universal(in_path, preset, opts, on_done)
   opts = opts or {}
   local crops = {}
-  if preset == 'universal_2160' then
+  if preset == 'universal_1920' then
     crops = {
       { name = 'youtube', target_w = 1920, target_h = 1080, rescale = opts.rescale_youtube },
       { name = 'reels',   target_w = 1080, target_h = 1920, rescale = opts.rescale_reels   },
     }
-  elseif preset == 'universal_2880' then
+  elseif preset == 'universal_2160' then
     crops = {
-      { name = 'youtube', target_w = 2880, target_h = 1620, rescale = opts.rescale_youtube },
-      { name = 'reels',   target_w = 1620, target_h = 2880, rescale = opts.rescale_reels   },
+      { name = 'youtube', target_w = 1920, target_h = 1080, rescale = opts.rescale_youtube },
+      { name = 'reels',   target_w = 1080, target_h = 1920, rescale = opts.rescale_reels   },
     }
   else
     on_done(false, in_path, 'unknown universal preset: ' .. tostring(preset))

@@ -59,17 +59,20 @@ local function keystroke_anchor_for(vp)
   if not vp or not vp.region then return nil end
   local r = vp.region
   local pad = 18
-  local label_h = 44 -- height of keystroke pill incl padding
-  if vp.preset == 'universal_2160' then
+  local label_h = 44
+  -- For universal presets, anchor at the bottom-left of the YouTube∩Reels
+  -- intersection (smaller dimension of each safe zone = 540 / 540 etc.).
+  if vp.preset == 'universal_1920' then
+    -- Source 1920×1920 px = 960×960 pt. YouTube 960×540 pt. Reels 540×960 pt.
     -- Intersection = 540×540 pt centered.
     local ix = r.x + (r.w - 540) / 2
     local iy = r.y + (r.h - 540) / 2
     return { x = ix + pad, y = iy + 540 - pad - label_h }
-  elseif vp.preset == 'universal_2880' then
-    -- Intersection = 810×810 pt centered.
-    local ix = r.x + (r.w - 810) / 2
-    local iy = r.y + (r.h - 810) / 2
-    return { x = ix + pad, y = iy + 810 - pad - label_h }
+  elseif vp.preset == 'universal_2160' then
+    -- Intersection = 540×540 pt centered.
+    local ix = r.x + (r.w - 540) / 2
+    local iy = r.y + (r.h - 540) / 2
+    return { x = ix + pad, y = iy + 540 - pad - label_h }
   else
     return { x = r.x + pad, y = r.y + r.h - pad - label_h }
   end
@@ -81,19 +84,18 @@ end
 local function safe_frames_for(vp)
   if not vp then return nil end
   -- Retina = 2 on built-in display; converts px → pt for canvas sizing.
-  if vp.preset == 'universal_2160' then
-    -- Source 2160×2160 px = 1080×1080 pt.
-    -- YouTube 1920×1080 px = 960×540 pt. Reels 1080×1920 px = 540×960 pt.
+  -- YouTube 16:9 1920×1080 px = 960×540 pt. Reels 9:16 1080×1920 px = 540×960 pt.
+  if vp.preset == 'universal_1920' then
+    -- Source 1920×1920 px = 960×960 pt — both safe zones fit EXACTLY.
     return {
       { name = 'YouTube 16:9', w = 960, h = 540, color = { 1.0, 0.85, 0.20 } },
       { name = 'Reels 9:16',   w = 540, h = 960, color = { 1.0, 0.35, 0.35 } },
     }
-  elseif vp.preset == 'universal_2880' then
-    -- Source 2880×2880 px = 1440×1440 pt.
-    -- YouTube 1.5× 2880×1620 px = 1440×810 pt. Reels 1.5× 1620×2880 px = 810×1440 pt.
+  elseif vp.preset == 'universal_2160' then
+    -- Source 2160×2160 px = 1080×1080 pt; safe zones same pixel dims.
     return {
-      { name = 'YouTube 1.5× 16:9', w = 1440, h = 810,  color = { 1.0, 0.85, 0.20 } },
-      { name = 'Reels 1.5× 9:16',   w = 810,  h = 1440, color = { 1.0, 0.35, 0.35 } },
+      { name = 'YouTube 16:9', w = 960, h = 540, color = { 1.0, 0.85, 0.20 } },
+      { name = 'Reels 9:16',   w = 540, h = 960, color = { 1.0, 0.35, 0.35 } },
     }
   end
   return nil
@@ -447,7 +449,7 @@ local function register_handlers()
         and { w = out.rescale_reels_w, h = out.rescale_reels_h }
         or rescale_arg
 
-      if out.auto_crop_universal and (preset == 'universal_2160' or preset == 'universal_2880') then
+      if out.auto_crop_universal and (preset == 'universal_1920' or preset == 'universal_2160') then
         set_status('capturing')
         post.split_universal(path, preset, {
           rescale_youtube = rs_yt,
