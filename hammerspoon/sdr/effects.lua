@@ -70,6 +70,56 @@ function M.clear_all()
     if s.canvas then s.canvas:delete() end
   end
   active_dots = {}
+  M.hide_keystroke()
+end
+
+-- ─── Keystroke overlay ────────────────────────────────────────────
+local ks_canvas = nil
+local ks_hide_timer = nil
+
+local KEY_PADDING = 10
+local KEY_FONT_SIZE = 22
+local KEY_BG = { red = 0, green = 0, blue = 0, alpha = 0.72 }
+local KEY_FG = { red = 1, green = 1, blue = 1, alpha = 1 }
+local KEY_RADIUS = 8
+local KEY_HOLD_MS = 900
+
+-- Show key combo at (x, y) screen coords (top-left of label). Replaces any
+-- active keystroke display. Auto-fades after KEY_HOLD_MS.
+function M.show_keystroke(text, x, y)
+  if ks_hide_timer then ks_hide_timer:stop(); ks_hide_timer = nil end
+  if ks_canvas then ks_canvas:delete(); ks_canvas = nil end
+  if not text or #text == 0 then return end
+
+  -- Rough size: KEY_FONT_SIZE * 0.6 px per char.
+  local w = math.max(36, math.floor(#text * KEY_FONT_SIZE * 0.62 + KEY_PADDING * 2 + 0.5))
+  local h = KEY_FONT_SIZE + KEY_PADDING * 2
+  ks_canvas = hs.canvas.new({ x = x, y = y, w = w, h = h })
+  ks_canvas:level('overlay')
+  ks_canvas:appendElements({
+    type = 'rectangle',
+    action = 'fill',
+    fillColor = KEY_BG,
+    roundedRectRadii = { xRadius = KEY_RADIUS, yRadius = KEY_RADIUS },
+  }, {
+    type = 'text',
+    text = text,
+    textColor = KEY_FG,
+    textFont  = 'Menlo Bold',
+    textSize  = KEY_FONT_SIZE,
+    textAlignment = 'center',
+    frame = { x = 0, y = KEY_PADDING - 2, w = w, h = KEY_FONT_SIZE + 4 },
+  })
+  ks_canvas:show()
+  ks_hide_timer = hs.timer.doAfter(KEY_HOLD_MS / 1000, function()
+    if ks_canvas then ks_canvas:delete(); ks_canvas = nil end
+    ks_hide_timer = nil
+  end)
+end
+
+function M.hide_keystroke()
+  if ks_hide_timer then ks_hide_timer:stop(); ks_hide_timer = nil end
+  if ks_canvas then ks_canvas:delete(); ks_canvas = nil end
 end
 
 return M

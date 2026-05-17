@@ -104,6 +104,17 @@
     document.getElementById('auto-path-pps').value = pb.auto_path_pps || 1000;
     document.getElementById('auto-path-easing').value = pb.auto_path_easing || 'in_out';
     document.getElementById('click-effects').checked = pb.show_click_effects === true;
+    document.getElementById('show-keystrokes').checked = pb.show_keystrokes === true;
+
+    const sh = (currentSeq.viewport && currentSeq.viewport.overlay_shift) || { dx: 0, dy: 0 };
+    document.getElementById('overlay-shift-x').value = sh.dx || 0;
+    document.getElementById('overlay-shift-y').value = sh.dy || 0;
+
+    const out = currentSeq.output || {};
+    document.getElementById('auto-crop-universal').checked = out.auto_crop_universal === true;
+    document.getElementById('auto-rescale').checked = out.rescale === true;
+    document.getElementById('rescale-w').value = out.rescale_w || 1920;
+    document.getElementById('rescale-h').value = out.rescale_h || 1080;
   }
 
   function readPlaybackFromUI() {
@@ -113,6 +124,32 @@
     currentSeq.playback.auto_path_pps      = parseInt(document.getElementById('auto-path-pps').value, 10) || 1000;
     currentSeq.playback.auto_path_easing   = document.getElementById('auto-path-easing').value || 'in_out';
     currentSeq.playback.show_click_effects = document.getElementById('click-effects').checked;
+    currentSeq.playback.show_keystrokes    = document.getElementById('show-keystrokes').checked;
+  }
+
+  function readShiftFromUI() {
+    if (!currentSeq) return;
+    currentSeq.viewport = currentSeq.viewport || {};
+    currentSeq.viewport.overlay_shift = {
+      dx: parseInt(document.getElementById('overlay-shift-x').value, 10) || 0,
+      dy: parseInt(document.getElementById('overlay-shift-y').value, 10) || 0,
+    };
+  }
+
+  function readOutputFromUI() {
+    if (!currentSeq) return;
+    currentSeq.output = currentSeq.output || {};
+    currentSeq.output.auto_crop_universal = document.getElementById('auto-crop-universal').checked;
+    currentSeq.output.rescale   = document.getElementById('auto-rescale').checked;
+    currentSeq.output.rescale_w = parseInt(document.getElementById('rescale-w').value, 10) || 1920;
+    currentSeq.output.rescale_h = parseInt(document.getElementById('rescale-h').value, 10) || 1080;
+  }
+
+  function readAllFromUI() {
+    readVpFromUI();
+    readPlaybackFromUI();
+    readShiftFromUI();
+    readOutputFromUI();
   }
 
   function readVpFromUI() {
@@ -277,7 +314,7 @@
 
   document.getElementById('btn-save').addEventListener('click', async () => {
     if (!currentSeq) return;
-    readVpFromUI();
+    readAllFromUI();
     await callLua('save_sequence', { sequence: currentSeq });
     document.getElementById('last-output').textContent = 'saved ' + currentSeq.name;
   });
@@ -299,7 +336,7 @@
         'ERROR: no currentSeq in JS (click New first, watch for errors)';
       return;
     }
-    readVpFromUI();
+    readAllFromUI();
     try {
       const result = await callLua('apply_viewport', { sequence: currentSeq });
       if (result && result.error) {
@@ -332,6 +369,20 @@
     renderTimeline();
   });
   document.getElementById('auto-path-easing').addEventListener('change', readPlaybackFromUI);
+  document.getElementById('show-keystrokes').addEventListener('change', readPlaybackFromUI);
+
+  ['overlay-shift-x', 'overlay-shift-y'].forEach((id) => {
+    document.getElementById(id).addEventListener('change', () => {
+      readShiftFromUI();
+      callLua('show_overlay', {
+        shift: currentSeq.viewport.overlay_shift,
+      }).catch(() => {});
+    });
+  });
+
+  ['auto-crop-universal', 'auto-rescale', 'rescale-w', 'rescale-h'].forEach((id) => {
+    document.getElementById(id).addEventListener('change', readOutputFromUI);
+  });
 
   document.getElementById('btn-apply-auto').addEventListener('click', async () => {
     if (!currentSeq) return;
@@ -377,16 +428,16 @@
 
   document.getElementById('btn-play').addEventListener('click', async () => {
     if (!currentSeq) return;
-    readPlaybackFromUI();
-    await callLua('save_sequence', { sequence: currentSeq });
+    readAllFromUI();
+    // Send in-memory sequence; do NOT auto-save. Use Save button to persist.
     callLua('play', { sequence: currentSeq, lead_ms: 500, tail_ms: 500 });
   });
 
   document.getElementById('btn-capture').addEventListener('click', async () => {
     if (!currentSeq) return;
-    readVpFromUI();
-    readPlaybackFromUI();
-    await callLua('save_sequence', { sequence: currentSeq });
+    readAllFromUI();
+    // Push current settings into the active server-side seq without disk write.
+    await callLua('set_active_sequence', { sequence: currentSeq });
     const r = await callLua('capture_and_play', { lead_ms: 1000, tail_ms: 1000 });
     if (r.error) alert(r.error);
     else document.getElementById('last-output').textContent = 'capturing → ' + r.output;

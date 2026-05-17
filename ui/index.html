@@ -54,6 +54,15 @@
       <button id="btn-hide-overlay">Hide</button>
     </div>
     <div id="vp-region" class="muted">region: not set</div>
+    <div class="row">
+      <label>Overlay shift X
+        <input type="number" id="overlay-shift-x" value="0" step="1" style="width:70px">
+      </label>
+      <label>Y
+        <input type="number" id="overlay-shift-y" value="0" step="1" style="width:70px">
+      </label>
+      <span class="muted">nudges overlay only (not recording region)</span>
+    </div>
   </section>
 
   <section class="card">
@@ -83,9 +92,25 @@
       </label>
     </div>
     <div class="row">
-      <label><input type="checkbox" id="click-effects"> Show click circles (visible in mp4)</label>
+      <label><input type="checkbox" id="click-effects"> Show click circles</label>
+      <label><input type="checkbox" id="show-keystrokes"> Show keystrokes overlay</label>
+    </div>
+    <div class="row">
       <button id="btn-apply-auto">Apply auto-path to timeline</button>
-      <span class="muted">drops mouse_move events permanently</span>
+      <span class="muted">strips mouse_move events from sequence (preserves drag moves)</span>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Output</h2>
+    <div class="row">
+      <label><input type="checkbox" id="auto-crop-universal"> Auto-crop universal → YouTube + Reels mp4</label>
+    </div>
+    <div class="row">
+      <label><input type="checkbox" id="auto-rescale"> Rescale</label>
+      <label>W <input type="number" id="rescale-w" value="1920" min="0" style="width:80px"></label>
+      <label>H <input type="number" id="rescale-h" value="1080" min="0" style="width:80px"></label>
+      <span class="muted">post-encode scale; ignored if auto-crop is on</span>
     </div>
   </section>
 

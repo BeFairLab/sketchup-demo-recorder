@@ -172,25 +172,32 @@ end
 
 -- Show overlay anchored to SU window using region absolute coords.
 -- safe_frames: optional list of {name, w, h, color={r,g,b}} drawn centered.
-function M.show_overlay(region, safe_frames)
+-- shift: optional {dx, dy} extra offset applied to the overlay position only
+-- (not to the recording region itself — purely for visual alignment).
+function M.show_overlay(region, safe_frames, shift)
   if not region then return nil end
   M.hide_overlay()
+  shift = shift or { dx = 0, dy = 0 }
 
   local win = find_su_window()
   if win then
     local f = win:frame()
     overlay_offset = {
-      dx = region.x - f.x,
-      dy = region.y - f.y,
+      dx = region.x - f.x + (shift.dx or 0),
+      dy = region.y - f.y + (shift.dy or 0),
       w  = region.w,
       h  = region.h,
     }
   else
-    overlay_offset = { dx = 0, dy = 0, w = region.w, h = region.h }
+    overlay_offset = { dx = shift.dx or 0, dy = shift.dy or 0, w = region.w, h = region.h }
   end
   overlay_safe_frames = safe_frames
 
-  overlay_canvas = hs.canvas.new(region)
+  overlay_canvas = hs.canvas.new({
+    x = region.x + (shift.dx or 0),
+    y = region.y + (shift.dy or 0),
+    w = region.w, h = region.h,
+  })
   rebuild_overlay_elements()
   overlay_canvas:show()
   attach_window_follower()
@@ -223,13 +230,15 @@ function M.resume_overlay()
   if not saved_overlay_state then return end
   local win = find_su_window()
   local f = win and win:frame() or { x = 0, y = 0 }
+  -- saved_overlay_state.offset already includes any shift, so passing
+  -- shift={0,0} preserves the same on-screen position.
   local region = {
     x = f.x + saved_overlay_state.offset.dx,
     y = f.y + saved_overlay_state.offset.dy,
     w = saved_overlay_state.offset.w,
     h = saved_overlay_state.offset.h,
   }
-  M.show_overlay(region, saved_overlay_state.safe_frames)
+  M.show_overlay(region, saved_overlay_state.safe_frames, { dx = 0, dy = 0 })
   saved_overlay_state = nil
 end
 

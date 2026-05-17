@@ -17,11 +17,13 @@ local on_progress_callback = nil
 -- (x_window/y_window) onto current absolute screen position.
 local su_anchor = nil
 
--- Auto-path state set per .play() call.
+-- Playback state set per .play() call.
 local auto_path = false
 local auto_path_pps = 1000
 local auto_path_easing = 'in_out'
 local show_click_effects = false
+local show_keystrokes = false
+local keystroke_anchor = nil   -- {x, y} screen coords for keystroke label
 
 local function ease(t, kind)
   if kind == 'linear' then return t
@@ -170,13 +172,27 @@ function M.play(sequence, opts)
   auto_path_pps = tonumber(pb.auto_path_pps) or 1000
   auto_path_easing = pb.auto_path_easing or 'in_out'
   show_click_effects = pb.show_click_effects == true
+  show_keystrokes = pb.show_keystrokes == true
+  keystroke_anchor = pb.keystroke_anchor   -- {x, y} screen coords or nil
 
-  -- When auto_path, drop recorded mouse_move events; we'll interpolate.
+  -- When auto_path, drop mouse_move events that happen BETWEEN clicks but
+  -- KEEP moves that occur during a drag (mouse_down → moves → mouse_up).
   local events = sequence.events
   if auto_path then
     local filtered = {}
+    local in_drag = false
     for _, e in ipairs(events) do
-      if e.type ~= 'mouse_move' then table.insert(filtered, e) end
+      if e.type == 'mouse_down' then
+        in_drag = true
+        table.insert(filtered, e)
+      elseif e.type == 'mouse_up' then
+        in_drag = false
+        table.insert(filtered, e)
+      elseif e.type == 'mouse_move' then
+        if in_drag then table.insert(filtered, e) end
+      else
+        table.insert(filtered, e)
+      end
     end
     events = filtered
   end
@@ -186,10 +202,18 @@ function M.play(sequence, opts)
   local i = 1
 
   local function trigger_click_effect(evt)
-    if not show_click_effects then return end
-    if evt.type == 'mouse_down' then
+    if show_click_effects and evt.type == 'mouse_down' then
       local x, y = resolved_xy(evt)
       effects.click_dot(x, y)
+    end
+    if show_keystrokes and evt.type == 'key_down' and keystroke_anchor then
+      local mods = evt.modifiers or {}
+      local sym = { cmd = '⌘', shift = '⇧', alt = '⌥', ctrl = '⌃', fn = 'fn' }
+      local parts = {}
+      for _, m in ipairs(mods) do table.insert(parts, sym[m] or m) end
+      local key = (evt.key or ''):upper()
+      table.insert(parts, key)
+      effects.show_keystroke(table.concat(parts, ' '), keystroke_anchor.x, keystroke_anchor.y)
     end
   end
 

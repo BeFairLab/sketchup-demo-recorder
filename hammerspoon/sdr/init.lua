@@ -10,6 +10,7 @@ local sizer    = require('sdr.window_sizer')
 local capture  = require('sdr.screen_capture')
 local bridge   = require('sdr.companion_bridge')
 local ui       = require('sdr.ui')
+local post     = require('sdr.post_process')
 
 local M = {}
 
@@ -48,6 +49,30 @@ local function ensure_seq(name)
   end
   current_seq = seq
   return seq
+end
+
+-- For universal presets, the keystroke label sits at the bottom-left of the
+-- intersection of YouTube + Reels safe areas (= smallest dimension of each).
+-- For all other presets, bottom-left of the recording region itself.
+-- Returns absolute screen coords {x, y} or nil.
+local function keystroke_anchor_for(vp)
+  if not vp or not vp.region then return nil end
+  local r = vp.region
+  local pad = 18
+  local label_h = 44 -- height of keystroke pill incl padding
+  if vp.preset == 'universal_2160' then
+    -- Intersection = 540×540 pt centered.
+    local ix = r.x + (r.w - 540) / 2
+    local iy = r.y + (r.h - 540) / 2
+    return { x = ix + pad, y = iy + 540 - pad - label_h }
+  elseif vp.preset == 'universal_2880' then
+    -- Intersection = 810×810 pt centered.
+    local ix = r.x + (r.w - 810) / 2
+    local iy = r.y + (r.h - 810) / 2
+    return { x = ix + pad, y = iy + 810 - pad - label_h }
+  else
+    return { x = r.x + pad, y = r.y + r.h - pad - label_h }
+  end
 end
 
 -- Safe-frame overlays for crop-target previewing. Returns nil for non-universal
@@ -97,6 +122,15 @@ local function register_handlers()
     return { name = current_seq_name, sequence = current_seq }
   end)
 
+  -- Update current_seq in memory without disk write (used by play/capture
+  -- so unsaved UI edits take effect immediately).
+  ui.register('set_active_sequence', function(payload)
+    if not payload or not payload.sequence then return { error = 'no sequence' } end
+    current_seq = payload.sequence
+    current_seq_name = payload.sequence.name or current_seq_name
+    return { ok = true }
+  end)
+
   ui.register('load_sequence', function(payload)
     local seq = ensure_seq(payload.name)
     return seq
@@ -126,11 +160,16 @@ local function register_handlers()
     return { region = region, window_position = win_frame }
   end)
 
-  ui.register('show_overlay', function(_)
+  ui.register('show_overlay', function(payload)
     if not current_seq or not current_seq.viewport or not current_seq.viewport.region then
       return { shown = false, error = 'apply viewport first' }
     end
-    sizer.show_overlay(current_seq.viewport.region, safe_frames_for(current_seq.viewport))
+    -- Prefer shift passed in by UI (live edit) over saved value.
+    local shift = (payload and payload.shift)
+               or current_seq.viewport.overlay_shift
+               or { dx = 0, dy = 0 }
+    current_seq.viewport.overlay_shift = shift
+    sizer.show_overlay(current_seq.viewport.region, safe_frames_for(current_seq.viewport), shift)
     return { shown = true }
   end)
 
@@ -169,11 +208,13 @@ local function register_handlers()
   ui.register('play', function(payload)
     if not current_seq then return { error = 'no sequence' } end
     local seq = payload.sequence or current_seq
+    -- Inject computed keystroke anchor into playback.
+    seq.playback = seq.playback or {}
+    seq.playback.keystroke_anchor = keystroke_anchor_for(seq.viewport)
     -- Bring SketchUp to foreground BEFORE replay — otherwise events go to UI.
     local app = hs.application.find('SketchUp')
     if app then app:activate() end
     set_status('replaying')
-    -- Lead defaults to 800ms so SU has time to fully focus before first event.
     local lead = payload.lead_ms or 800
     replayer.play(seq, {
       lead_ms = lead,
@@ -214,16 +255,43 @@ local function register_handlers()
 
     set_status('capturing')
 
+    -- Inject computed keystroke anchor for this capture.
+    seq.playback = seq.playback or {}
+    seq.playback.keystroke_anchor = keystroke_anchor_for(seq.viewport)
+
     -- Hide overlay so it's NOT baked into the captured video.
     sizer.suppress_overlay()
 
     local ok, err = capture.start(seq.viewport.region, out_path, cap_seconds, function(exitCode, path, size)
-      set_status('idle')
       sizer.resume_overlay()
       if size <= 0 then
+        set_status('idle')
         ui.push('capture_done', { path = path, error = 'empty file (exit=' .. tostring(exitCode) .. ')' })
-        notify('SDR capture FAILED', path .. ' empty (exit ' .. tostring(exitCode) .. ')')
+        notify('SDR capture FAILED', path .. ' empty')
+        return
+      end
+
+      -- Run post-processing per output settings.
+      local out = seq.output or {}
+      local preset = seq.viewport and seq.viewport.preset
+
+      if out.auto_crop_universal and (preset == 'universal_2160' or preset == 'universal_2880') then
+        set_status('capturing') -- keep purple-ish status during post
+        post.split_universal(path, preset, function(_, _, outputs)
+          set_status('idle')
+          ui.push('capture_done', { path = path, size = size, post = outputs })
+          local msg = path .. '  +'
+          for _, o in ipairs(outputs or {}) do msg = msg .. ' ' .. o.name end
+          notify('SDR capture + crops', msg)
+        end)
+      elseif out.rescale and out.rescale_w and out.rescale_h then
+        post.rescale(path, { w = out.rescale_w, h = out.rescale_h }, function(ok2, out_path)
+          set_status('idle')
+          ui.push('capture_done', { path = path, size = size, scaled = ok2 and out_path or nil })
+          notify('SDR capture + scaled', (ok2 and out_path) or path)
+        end)
       else
+        set_status('idle')
         ui.push('capture_done', { path = path, size = size })
         notify('SDR capture done', path .. ' ' .. math.floor(size / 1024) .. 'KB')
       end
