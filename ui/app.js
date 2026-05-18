@@ -181,7 +181,9 @@
     // Preset-tab controls are NOT populated here — they live in the editor.
   }
 
-  async function loadPresetIntoCurrentSeq(name) {
+  // Apply a preset by name to the active timeline. Wraps the Lua apply_preset
+  // handler with mismatch confirmation.
+  async function linkPresetToTimeline(name) {
     if (!name || !currentSeq) return;
     const r = await callLua('apply_preset', { name });
     if (r.error) return alert(r.error);
@@ -189,102 +191,10 @@
       if (!confirm('Warning: ' + r.mismatch + '\n\nApply anyway?')) return;
     }
     currentSeq = r.sequence;
-    applySeqToUI();
     renderTimeline();
     updateActiveLabels();
-    document.getElementById('preset-name').value = name;
-    document.getElementById('last-output').textContent = 'preset loaded: ' + name;
-  }
-
-  function applySeqToUI() {
-    if (!currentSeq) return;
-    const vp = currentSeq.viewport || {};
-    document.querySelectorAll('input[name=vp-mode]').forEach((r) => {
-      r.checked = (r.value === (vp.mode || 'viewport'));
-    });
-    if (vp.preset) document.getElementById('vp-preset').value = vp.preset;
-    document.getElementById('vp-w').value = vp.width || 1920;
-    document.getElementById('vp-h').value = vp.height || 1080;
-    const r = vp.region || {};
-    document.getElementById('vp-region').textContent =
-      r.w ? `region: ${r.x},${r.y} ${r.w}×${r.h}` : 'region: not set';
-
-    const pb = currentSeq.playback || {};
-    document.getElementById('auto-path').checked = pb.auto_path === true;
-    document.getElementById('auto-path-pps').value = pb.auto_path_pps || 1000;
-    document.getElementById('auto-path-easing').value = pb.auto_path_easing || 'in_out';
-    document.getElementById('click-effects').checked = pb.show_click_effects === true;
-    document.getElementById('show-keystrokes').checked = pb.show_keystrokes === true;
-    document.getElementById('pre-delay-ms').value  = (pb.pre_delay_ms  != null) ? pb.pre_delay_ms  : 1000;
-    document.getElementById('post-delay-ms').value = (pb.post_delay_ms != null) ? pb.post_delay_ms : 1000;
-
-    const sh = (currentSeq.viewport && currentSeq.viewport.overlay_shift) || { dx: 0, dy: 0 };
-    document.getElementById('overlay-shift-x').value = sh.dx || 0;
-    document.getElementById('overlay-shift-y').value = sh.dy || 0;
-
-    const out = currentSeq.output || {};
-    document.getElementById('auto-crop-universal').checked = out.auto_crop_universal === true;
-    document.getElementById('auto-rescale').checked = out.rescale === true;
-    document.getElementById('rescale-w').value = out.rescale_w || 1920;
-    document.getElementById('rescale-h').value = out.rescale_h || 1080;
-    document.getElementById('rescale-yt-w').value = out.rescale_youtube_w || 1920;
-    document.getElementById('rescale-yt-h').value = out.rescale_youtube_h || 1080;
-    document.getElementById('rescale-rl-w').value = out.rescale_reels_w || 1080;
-    document.getElementById('rescale-rl-h').value = out.rescale_reels_h || 1920;
-  }
-
-  function readVpFromUI() {
-    const mode = document.querySelector('input[name=vp-mode]:checked').value;
-    const preset = document.getElementById('vp-preset').value;
-    const width  = parseInt(document.getElementById('vp-w').value, 10);
-    const height = parseInt(document.getElementById('vp-h').value, 10);
-    if (!currentSeq) return null;
-    currentSeq.viewport = currentSeq.viewport || {};
-    currentSeq.viewport.mode = mode;
-    currentSeq.viewport.preset = preset;
-    currentSeq.viewport.width = width;
-    currentSeq.viewport.height = height;
-  }
-
-  function readPlaybackFromUI() {
-    if (!currentSeq) return;
-    currentSeq.playback = currentSeq.playback || {};
-    currentSeq.playback.auto_path          = document.getElementById('auto-path').checked;
-    currentSeq.playback.auto_path_pps      = parseInt(document.getElementById('auto-path-pps').value, 10) || 1000;
-    currentSeq.playback.auto_path_easing   = document.getElementById('auto-path-easing').value || 'in_out';
-    currentSeq.playback.show_click_effects = document.getElementById('click-effects').checked;
-    currentSeq.playback.show_keystrokes    = document.getElementById('show-keystrokes').checked;
-    currentSeq.playback.pre_delay_ms       = parseInt(document.getElementById('pre-delay-ms').value, 10);
-    currentSeq.playback.post_delay_ms      = parseInt(document.getElementById('post-delay-ms').value, 10);
-  }
-
-  function readShiftFromUI() {
-    if (!currentSeq) return;
-    currentSeq.viewport = currentSeq.viewport || {};
-    currentSeq.viewport.overlay_shift = {
-      dx: parseInt(document.getElementById('overlay-shift-x').value, 10) || 0,
-      dy: parseInt(document.getElementById('overlay-shift-y').value, 10) || 0,
-    };
-  }
-
-  function readOutputFromUI() {
-    if (!currentSeq) return;
-    currentSeq.output = currentSeq.output || {};
-    currentSeq.output.auto_crop_universal = document.getElementById('auto-crop-universal').checked;
-    currentSeq.output.rescale   = document.getElementById('auto-rescale').checked;
-    currentSeq.output.rescale_w = parseInt(document.getElementById('rescale-w').value, 10) || 1920;
-    currentSeq.output.rescale_h = parseInt(document.getElementById('rescale-h').value, 10) || 1080;
-    currentSeq.output.rescale_youtube_w = parseInt(document.getElementById('rescale-yt-w').value, 10) || 1920;
-    currentSeq.output.rescale_youtube_h = parseInt(document.getElementById('rescale-yt-h').value, 10) || 1080;
-    currentSeq.output.rescale_reels_w   = parseInt(document.getElementById('rescale-rl-w').value, 10) || 1080;
-    currentSeq.output.rescale_reels_h   = parseInt(document.getElementById('rescale-rl-h').value, 10) || 1920;
-  }
-
-  function readAllFromUI() {
-    readVpFromUI();
-    readPlaybackFromUI();
-    readShiftFromUI();
-    readOutputFromUI();
+    markTimelineDirty();
+    document.getElementById('last-output').textContent = 'preset linked: ' + name;
   }
 
   // ─── Editing-preset ↔ UI controls ──────────────────────────────
@@ -484,28 +394,33 @@
   }
 
   // ─── Header (top card) ─────────────────────────────────────────
-  // Header preset = ACTIVE preset for capture/replay. Independent of the
-  // Preset Settings tab editor.
+  // Header preset = ACTIVE preset for Apply / capture / replay.
+  // Independent of the Preset Settings tab editor.
   document.getElementById('preset-select').addEventListener('change', async (e) => {
     const name = e.target.value;
     activePresetName = name || null;
-    if (!name) return;
-    // If a timeline is loaded, link the preset (warns on mismatch).
-    if (currentSeq) await loadPresetIntoCurrentSeq(name);
+    document.getElementById('seq-preset-link').value = name || '';
+    if (!name || !currentSeq) return;
+    await linkPresetToTimeline(name);
   });
 
-  async function applyViewport() {
-    // Build envelope from the ACTIVE preset (header) — falls back to current
-    // timeline, then to the editing preset, then to defaults.
-    let envelope = null;
+  // Build a sequence envelope for apply_viewport. Priority:
+  //   1. Header active preset
+  //   2. Current timeline (already has linked preset's viewport merged in)
+  //   3. Editing preset (Preset Settings tab editor)
+  //   4. Defaults
+  async function presetEnvelopeForApply() {
     if (activePresetName) {
       const p = await callLua('get_preset', { name: activePresetName });
-      if (p && !p.error) envelope = Object.assign({ name: '__active__', events: [] }, p);
+      if (p && !p.error) return Object.assign({ name: '__active__', events: [] }, p);
     }
-    if (!envelope && currentSeq) envelope = JSON.parse(JSON.stringify(currentSeq));
-    if (!envelope && editingPreset) envelope = Object.assign({ name: '__editing__', events: [] }, editingPreset);
-    if (!envelope) envelope = Object.assign({ name: '__defaults__', events: [] }, defaultPresetBody());
+    if (currentSeq) return JSON.parse(JSON.stringify(currentSeq));
+    if (editingPreset) return Object.assign({ name: '__editing__', events: [] }, editingPreset);
+    return Object.assign({ name: '__defaults__', events: [] }, defaultPresetBody());
+  }
 
+  async function applyViewport() {
+    const envelope = await presetEnvelopeForApply();
     try {
       const result = await callLua('apply_viewport', { sequence: envelope });
       if (result && result.error) {
@@ -560,8 +475,9 @@
     if (!name) return;
     try {
       currentSeq = await callLua('new_sequence', { name: name.trim() });
-      applySeqToUI(); renderTimeline(); updateActiveLabels();
-      // Immediately persist so refresh shows it.
+      renderTimeline(); updateActiveLabels();
+      timelineDirty = false; updateTimelineDirtyBadge();
+      // Persist immediately so it shows in the sequence list.
       await callLua('save_timeline', { sequence: currentSeq });
       await refreshSequenceList();
       document.getElementById('last-output').textContent = 'created + saved timeline: ' + name;
@@ -602,22 +518,8 @@
     updateActiveLabels();
   });
 
-  // Build a "preset envelope" from current UI controls (works WITHOUT a
-  // loaded timeline — presets are first-class, decoupled from timelines).
-  function buildPresetFromUI() {
-    // Start from currentSeq if present so user-typed/edited values survive,
-    // else from a clean default seed.
-    const seed = currentSeq ? JSON.parse(JSON.stringify(currentSeq)) : {
-      version: 1, name: '__draft__', events: [],
-      viewport: {}, playback: {}, output: {}, chrome_offsets: {},
-    };
-    const saved = currentSeq;
-    currentSeq = seed;
-    readAllFromUI();
-    const result = seed;
-    currentSeq = saved;
-    return result;
-  }
+  // (former buildPresetFromUI removed — preset save now reads controls
+  // directly via readControlsIntoEditingPreset into editingPreset)
 
   // ─── Preset Settings tab (decoupled editor) ────────────────────
   // This tab manages PRESET FILES only. It does NOT affect:
@@ -792,19 +694,17 @@
   // ─── Tabs ──────────────────────────────────────────────────────
   document.querySelectorAll('.tab-btn').forEach((btn) => {
     btn.addEventListener('click', async () => {
-      // Block tab-switch away from Preset Settings with unsaved changes.
       const goingTo = btn.dataset.tab;
       const currentTabBtn = document.querySelector('.tab-btn.active');
-      if (currentTabBtn && currentTabBtn.dataset.tab === 'preset' && goingTo !== 'preset') {
-        if (!confirmDiscardDirty()) return;
-      }
+      const currentTab = currentTabBtn && currentTabBtn.dataset.tab;
+      // Block leaving Preset Settings with unsaved edits.
+      if (currentTab === 'preset' && goingTo !== 'preset' && !confirmDiscardDirty()) return;
+      // Block leaving Timeline with unsaved events / link changes.
+      if (currentTab === 'timeline' && goingTo !== 'timeline' && !confirmDiscardTimelineDirty()) return;
       document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b === btn));
       document.querySelectorAll('.tab').forEach(t => t.hidden = t.dataset.tab !== goingTo);
       if (goingTo === 'manage') await renderManagePane();
-      if (goingTo === 'preset' && !editingPreset) {
-        // If nothing being edited, show defaults so controls are visible.
-        applyEditingPresetToControls();
-      }
+      if (goingTo === 'preset' && !editingPreset) applyEditingPresetToControls();
     });
   });
 

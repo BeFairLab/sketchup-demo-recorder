@@ -164,16 +164,9 @@ local function register_handlers()
     return seq
   end)
 
-  ui.register('save_sequence', function(payload)
-    current_seq = payload.sequence
-    current_seq_name = payload.sequence.name
-    hs.settings.set(SETTINGS_KEY_ACTIVE, current_seq_name)
-    store.save(current_seq_name, current_seq)
-    return { saved = true }
-  end)
-
-  -- Save ONLY the events + preset_name link. Viewport/playback/output live
-  -- in the linked preset file and are reloaded from there on load_sequence.
+  -- Save the events + preset_name link. Viewport/playback/output live in
+  -- the linked preset file and are reloaded from there on load_sequence.
+  -- This is the ONLY way to persist timeline changes.
   ui.register('save_timeline', function(payload)
     local seq = payload.sequence
     if not seq then return { error = 'no sequence' } end
@@ -187,21 +180,6 @@ local function register_handlers()
     current_seq = existing
     current_seq_name = seq.name
     hs.settings.set(SETTINGS_KEY_ACTIVE, seq.name)
-    return { saved = true }
-  end)
-
-  -- Save ONLY preset settings (viewport+playback+output) — preserves events.
-  ui.register('save_preset_to_sequence', function(payload)
-    local seq = payload.sequence
-    if not seq then return { error = 'no sequence' } end
-    local existing = store.load(seq.name) or store.new_sequence(seq.name)
-    existing.viewport = seq.viewport
-    existing.chrome_offsets = seq.chrome_offsets
-    existing.playback = seq.playback
-    existing.output = seq.output
-    store.save(seq.name, existing)
-    current_seq = existing
-    current_seq_name = seq.name
     return { saved = true }
   end)
 
