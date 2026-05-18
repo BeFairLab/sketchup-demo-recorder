@@ -282,18 +282,23 @@ function M.play(sequence, opts)
     local pause = math.max(0, evt.pause_before_ms or 0)
 
     local function do_event()
-      post_event(evt)
-      if evt.type == 'mouse_down' or evt.type == 'mouse_up' or evt.type == 'mouse_move' then
-        last_cursor = { x = select(1, resolved_xy(evt)), y = select(2, resolved_xy(evt)) }
+      -- Honour user-set skipped flag: respect the pause_before but do NOT
+      -- fire the underlying click/key/etc.
+      if not evt.skipped and evt.type ~= 'nop' then
+        post_event(evt)
+        if evt.type == 'mouse_down' or evt.type == 'mouse_up' or evt.type == 'mouse_move' then
+          last_cursor = { x = select(1, resolved_xy(evt)), y = select(2, resolved_xy(evt)) }
+        end
+        trigger_click_effect(evt)
       end
-      trigger_click_effect(evt)
       if on_progress_callback then on_progress_callback(i, #events, evt) end
       i = i + 1
       fire_next()
     end
 
     hs.timer.doAfter(pause / 1000, function()
-      if auto_path and (evt.type == 'mouse_down' or evt.type == 'mouse_up') then
+      if not evt.skipped and auto_path
+         and (evt.type == 'mouse_down' or evt.type == 'mouse_up') then
         local tx, ty = resolved_xy(evt)
         animate_to(tx, ty, do_event)
       else
@@ -329,7 +334,7 @@ function M.total_duration_ms(sequence, lead_ms, tail_ms)
       -- skip pause; this event won't replay
     else
       total = total + math.max(0, e.pause_before_ms or 0)
-      if ap and (e.type == 'mouse_down' or e.type == 'mouse_up') then
+      if ap and not e.skipped and (e.type == 'mouse_down' or e.type == 'mouse_up') then
         local x = e.x_window and (e.x_window) or e.x
         local y = e.y_window and (e.y_window) or e.y
         if prev_xy and x and y then

@@ -526,6 +526,10 @@ local function bind_hotkeys()
         ui.push('sequence_updated', seq)
       else
         if not current_seq then notify('SDR', 'Load a sequence first'); return end
+        if not current_seq.preset_name then
+          notify('SDR', 'Pick a preset in the header before recording')
+          return
+        end
         if not modes_extend then current_seq.events = {} end
         recorder.set_dead_zones(compute_dead_zones())
         recorder.start(current_seq, {

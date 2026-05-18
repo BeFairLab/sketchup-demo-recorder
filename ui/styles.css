@@ -107,6 +107,29 @@ button.primary:hover { background: #006fe0; }
 .chip.event.scroll     { background: #f6e5b8; color: #7a4f00; }
 
 .chip.event:hover { filter: brightness(0.96); }
+.chip.event.skipped { opacity: 0.4; text-decoration: line-through; }
+.chip.event.nop { background: #f0eef9; color: #555; font-style: italic; }
+
+.event-menu {
+  position: absolute;
+  display: flex; flex-direction: column;
+  background: #fff;
+  border: 1px solid #d1d1d6;
+  border-radius: 8px;
+  box-shadow: 0 4px 14px rgba(0,0,0,0.16);
+  padding: 4px;
+  z-index: 10000;
+  min-width: 180px;
+}
+.event-menu button {
+  text-align: left;
+  padding: 6px 10px;
+  border: none;
+  background: transparent;
+  border-radius: 4px;
+  font-size: 12px;
+}
+.event-menu button:hover { background: #f0f0f3; }
 
 #vp-region { margin-top: 6px; }
 #last-output { font-family: 'SF Mono', Menlo, monospace; font-size: 11px; word-break: break-all; }

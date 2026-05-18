@@ -385,9 +385,12 @@
 
       const evChip = document.createElement('span');
       evChip.className = 'chip event ' + (evt.type || '');
+      if (evt.skipped) evChip.classList.add('skipped');
       let label = evt.type;
       if (evt._synthetic && evt.type === 'auto_path') {
         label = `auto-path (${evt.count} moves)`;
+      } else if (evt.type === 'nop') {
+        label = `pause`;
       } else if (evt.type && evt.type.startsWith('mouse_')) {
         label += ` ${evt.button || ''} @${evt.x},${evt.y}`;
         evChip.title = JSON.stringify(evt, null, 2);
@@ -399,19 +402,76 @@
       }
       evChip.textContent = label;
       if (!evt._synthetic) {
-        evChip.addEventListener('click', () => {
-          const choice = prompt('Action: (d)elete  (c)omment  (s)kip', 'c');
-          if (choice === 'd') {
-            const idx = (currentSeq.events || []).indexOf(evt);
-            if (idx >= 0) { currentSeq.events.splice(idx, 1); markTimelineDirty(); renderTimeline(); }
-          } else if (choice === 'c') {
-            const c = prompt('Comment:', evt.comment || '');
-            if (c !== null) { evt.comment = c; markTimelineDirty(); renderTimeline(); }
-          }
+        evChip.addEventListener('click', (e) => {
+          showEventMenu(e.target, evt);
         });
       }
       wrap.appendChild(evChip);
     });
+  }
+
+  // Inline action menu shown next to a clicked event chip.
+  function showEventMenu(anchorEl, evt) {
+    document.querySelectorAll('.event-menu').forEach(m => m.remove());
+    const menu = document.createElement('div');
+    menu.className = 'event-menu';
+
+    const mkItem = (label, fn) => {
+      const b = document.createElement('button');
+      b.textContent = label;
+      b.addEventListener('click', () => { fn(); menu.remove(); });
+      return b;
+    };
+
+    const idx = currentSeq.events.indexOf(evt);
+
+    menu.appendChild(mkItem('Delete', () => {
+      if (idx < 0) return;
+      currentSeq.events.splice(idx, 1);
+      markTimelineDirty(); renderTimeline();
+    }));
+
+    menu.appendChild(mkItem(evt.skipped ? 'Un-skip' : 'Skip during replay', () => {
+      evt.skipped = !evt.skipped;
+      markTimelineDirty(); renderTimeline();
+    }));
+
+    menu.appendChild(mkItem('Insert pause before…', () => {
+      const ms = parseInt(prompt('Pause duration (ms) before this event:', '500'), 10);
+      if (!ms || ms <= 0) return;
+      const nop = { id: 'evt_nop_' + Date.now(), type: 'nop', pause_before_ms: ms };
+      currentSeq.events.splice(idx, 0, nop);
+      markTimelineDirty(); renderTimeline();
+    }));
+
+    menu.appendChild(mkItem('Insert pause after…', () => {
+      const ms = parseInt(prompt('Pause duration (ms) after this event:', '500'), 10);
+      if (!ms || ms <= 0) return;
+      const nop = { id: 'evt_nop_' + Date.now(), type: 'nop', pause_before_ms: ms };
+      currentSeq.events.splice(idx + 1, 0, nop);
+      markTimelineDirty(); renderTimeline();
+    }));
+
+    menu.appendChild(mkItem('Comment…', () => {
+      const c = prompt('Comment:', evt.comment || '');
+      if (c !== null) { evt.comment = c; markTimelineDirty(); renderTimeline(); }
+    }));
+
+    menu.appendChild(mkItem('Close', () => {}));
+
+    const rect = anchorEl.getBoundingClientRect();
+    menu.style.left = (rect.left + window.scrollX) + 'px';
+    menu.style.top  = (rect.bottom + window.scrollY + 4) + 'px';
+    document.body.appendChild(menu);
+
+    // Dismiss on outside click.
+    const dismiss = (ev) => {
+      if (!menu.contains(ev.target)) {
+        menu.remove();
+        document.removeEventListener('mousedown', dismiss, true);
+      }
+    };
+    setTimeout(() => document.addEventListener('mousedown', dismiss, true), 0);
   }
 
   // ─── Header (top card) ─────────────────────────────────────────
@@ -590,15 +650,25 @@
     if (!confirmDiscardDirty()) return;
     const name = prompt('New preset name:');
     if (!name) return;
-    editingPreset = Object.assign({ name: name.trim() }, defaultPresetBody());
+    const trimmed = name.trim();
+    editingPreset = Object.assign({ name: trimmed }, defaultPresetBody());
     applyEditingPresetToControls();
     try {
-      await callLua('save_preset', { name: name.trim(), sequence: editingPreset });
+      await callLua('save_preset', { name: trimmed, sequence: editingPreset });
       editingPresetDirty = false;
       updateDirtyBadge();
       await refreshPresetList();
-      document.getElementById('preset-select-edit').value = name.trim();
-      document.getElementById('last-output').textContent = 'created preset (defaults): ' + name;
+      // Activate immediately: select in editor, in header, link to timeline.
+      document.getElementById('preset-select-edit').value = trimmed;
+      document.getElementById('preset-select').value = trimmed;
+      activePresetName = trimmed;
+      if (currentSeq) {
+        currentSeq.preset_name = trimmed;
+        document.getElementById('seq-preset-link').value = trimmed;
+        markTimelineDirty();
+      }
+      updateActiveLabels();
+      document.getElementById('last-output').textContent = 'created + activated preset: ' + trimmed;
     } catch (e) { alert('preset new failed: ' + e.message); }
   });
 
@@ -667,20 +737,38 @@
       isRecording ? '■ Stop recording' : '↻ Continue (append)';
   }
 
+  // Recording requires a linked preset (so apply_viewport / capture have
+  // sensible settings). If header preset is set but timeline isn't linked,
+  // auto-link. Otherwise block with a clear message.
+  async function ensurePresetLinkedForRecording() {
+    if (!currentSeq) { alert('Load a timeline first'); return false; }
+    if (currentSeq.preset_name) return true;
+    if (activePresetName) {
+      // Auto-link the header preset.
+      currentSeq.preset_name = activePresetName;
+      document.getElementById('seq-preset-link').value = activePresetName;
+      // Pull preset settings into currentSeq so capture has them.
+      const r = await callLua('apply_preset', { name: activePresetName }).catch(() => null);
+      if (r && r.sequence) currentSeq = r.sequence;
+      markTimelineDirty();
+      updateActiveLabels();
+      return true;
+    }
+    alert('Pick a preset in the header before recording (so playback + output settings exist).');
+    return false;
+  }
+
   document.getElementById('btn-rec').addEventListener('click', async () => {
-    if (!currentSeq) return alert('load a timeline first');
-    if (isRecording) await callLua('stop_record', {});
-    else await callLua('start_record', { append: false });
+    if (isRecording) return callLua('stop_record', {});
+    if (!(await ensurePresetLinkedForRecording())) return;
+    await callLua('start_record', { append: false });
   });
 
   document.getElementById('btn-rec-continue').addEventListener('click', async () => {
-    if (!currentSeq) return alert('load a timeline first');
-    if (isRecording) {
-      await callLua('stop_record', {});
-    } else {
-      await callLua('start_record', { append: true });
-      document.getElementById('last-output').textContent = 'continuing recording (append)';
-    }
+    if (isRecording) return callLua('stop_record', {});
+    if (!(await ensurePresetLinkedForRecording())) return;
+    await callLua('start_record', { append: true });
+    document.getElementById('last-output').textContent = 'continuing recording (append)';
   });
 
   // Playback / Output — mark dirty (no auto-save).
