@@ -36,6 +36,22 @@ end
 
 local SETTINGS_KEY_ACTIVE = 'sdr.active_sequence_name'
 
+-- Compute screen-space rects where recorder should IGNORE mouse events so
+-- our own UI / system menubar clicks never end up in the captured sequence.
+local MENUBAR_PT = 25
+local function compute_dead_zones()
+  local zones = {}
+  -- macOS menubar across every screen.
+  for _, s in ipairs(hs.screen.allScreens()) do
+    local f = s:fullFrame()
+    table.insert(zones, { x = f.x, y = f.y, w = f.w, h = MENUBAR_PT })
+  end
+  -- Our UI window, if open.
+  local frame = ui.is_open() and ui.window_frame and ui.window_frame()
+  if frame then table.insert(zones, frame) end
+  return zones
+end
+
 local function ensure_seq(name)
   if not name or name == '' or name == 'nil' then
     error('ensure_seq: invalid name ' .. tostring(name))
@@ -330,6 +346,7 @@ local function register_handlers()
     local append = payload and payload.append == true
     if not append then current_seq.events = {} end
     set_status('recording')
+    recorder.set_dead_zones(compute_dead_zones())
     recorder.start(current_seq, {
       append = append,
       on_change = function(n)
@@ -510,6 +527,7 @@ local function bind_hotkeys()
       else
         if not current_seq then notify('SDR', 'Load a sequence first'); return end
         if not modes_extend then current_seq.events = {} end
+        recorder.set_dead_zones(compute_dead_zones())
         recorder.start(current_seq, {
           append = modes_extend,
           on_change = function(n) ui.push('event_count', { count = n }) end

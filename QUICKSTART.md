@@ -1,77 +1,67 @@
 # Quickstart
 
-## 0. Prerequisites
+5-minute path from clone → first recording.
 
-- macOS 13+
-- Hammerspoon (`brew install --cask hammerspoon`)
-- SketchUp 2022.1+ (resize_viewport API)
-- ffmpeg optional (`screencapture -V` is used by default)
+## 1. Prerequisites
 
-## 1. Install
+See [REQUIREMENTS.md](REQUIREMENTS.md). At a minimum:
+- macOS 13+, SketchUp 2022.1+, Hammerspoon, ffmpeg.
+
+## 2. Clone + install
 
 ```bash
-git clone <this repo> ~/Code/sketchup-demo-recorder
+git clone https://github.com/BeFairLab/sketchup-demo-recorder.git ~/Code/sketchup-demo-recorder
 cd ~/Code/sketchup-demo-recorder
 ./scripts/install.sh
 ```
 
-This:
+`install.sh`:
 - Symlinks `hammerspoon/sdr/` → `~/.hammerspoon/sdr`
 - Appends `require('sdr'); sdr.start(...)` to `~/.hammerspoon/init.lua`
-- Symlinks `companion/sdr_companion/*` → `~/Library/Application Support/SketchUp <ver>/SketchUp/Plugins/`
+- Symlinks the SDR Companion plugin into every installed SketchUp's Plugins folder
 
-## 2. Grant macOS permissions
+## 3. Grant macOS permissions
 
-System Settings → Privacy & Security:
+System Settings → Privacy & Security → enable for **Hammerspoon**:
+1. Accessibility
+2. Screen Recording
+3. Input Monitoring (if prompted)
 
-1. **Accessibility** → enable for **Hammerspoon** (required for `hs.eventtap` + `hs.window`)
-2. **Screen Recording** → enable for **Hammerspoon** (required for screen capture)
-3. **Input Monitoring** (if prompted) → enable for **Hammerspoon**
+## 4. Enable SDR Companion in SketchUp
 
-## 3. Launch
+Open SketchUp → **Window → Extension Manager** → toggle **SDR Companion** to ON → restart SketchUp once.
 
-1. Open Hammerspoon (menubar → its hammer icon)
-2. Open SketchUp; dismiss welcome and open any model
-3. Reload Hammerspoon: menubar → SDR → Reload
+## 5. Smoke test
 
-Verify companion plugin is alive:
-- Menubar → SDR → "Ping Companion" → should show **OK: pong**
-- Or: `cat /tmp/sdr_companion.log` should show "companion installed, polling …"
+1. Open Hammerspoon (menubar hammer icon → Reload Config if needed)
+2. Press **⌃⌥⌘V** → "Fair SketchUp Demo Recorder" window opens
+3. Click **Ping companion** → expect `{"result":"pong"}`. If timeout, the SDR Companion isn't loaded — recheck step 4.
 
-## 4. Open UI
+## 6. Make a first recording
 
-- Hotkey **⌃⌥⌘V** → opens "SketchUp Demo Recorder" window
+Follow [HOWTO.md](HOWTO.md). TL;DR:
+1. Preset settings tab → **New… (defaults)** → name it → tweak → **Save changes**
+2. Header: pick the preset → **Apply to SketchUp**
+3. Timeline tab → **New… (prompt + save)** → name it
+4. ⌃⌥⌘R → click around in SketchUp → ⌃⌥⌘R
+5. **⏺ Record + Replay** → mp4 lands on Desktop
 
-## 5. Record your first sequence
-
-1. In SDR UI: type a name in the text field → click **New**
-2. Set viewport mode + preset → **Apply to SketchUp** (SU window resizes)
-3. Switch to SketchUp, put it in the start state (open scene, no selection)
-4. Hotkey **⌃⌥⌘R** → recording starts (menubar dot turns red)
-5. Click around in SketchUp as if doing the demo
-6. Hotkey **⌃⌥⌘R** → recording stops
-7. Back in SDR UI: timeline populates. Edit pause-chip values (ms) inline.
-8. Click **Save**
-
-## 6. Replay
-
-- **▶ Play (no capture)** — fires events with edited timings; nothing recorded
-- **⏺ Record + Replay** — starts `screencapture -V` on viewport region, replays, saves mp4 to `~/Movies/sdr/`
-
-## 7. Hotkeys
+## Hotkeys
 
 | Combo | Action |
 |---|---|
-| ⌃⌥⌘R | Toggle record clicks |
+| ⌃⌥⌘R | Toggle record (fresh) |
+| ⌃⌥⌘E | Toggle record (continue / append) |
 | ⌃⌥⌘P | Replay sequence (no capture) |
-| ⌃⌥⌘V | Show/hide SDR UI |
+| ⌃⌥⌘V | Show/hide tool window |
 
 ## Troubleshooting
 
 | Symptom | Fix |
 |---|---|
 | Hotkeys don't fire | Grant Accessibility to Hammerspoon, then reload HS |
-| Ping Companion fails | Restart SketchUp; check `/tmp/sdr_companion.log` |
-| Empty mp4 / black frames | Grant Screen Recording to Hammerspoon AND `/usr/sbin/screencapture` |
-| Apply Viewport fails | Need SketchUp 2022.1+ for `Sketchup.resize_viewport` |
-| Hotkeys interfere with recording | Recorder filters our 3 hotkeys automatically |
+| `Ping companion` fails | Restart SketchUp; check `/tmp/sdr_companion.log` |
+| Empty mp4 / black frames | Grant Screen Recording to Hammerspoon |
+| `Apply to SketchUp` errors | Need SketchUp 2022.1+ for `Sketchup.resize_viewport` |
+| Replay clicks land off-target | SU window moved after recording — Apply preset again |
+| Reels variant is 0 KB | Crop target exceeds source — switch to smaller universal preset |

@@ -38,6 +38,10 @@ end
 -- Keycodes that we MUST NOT record (our own hotkeys). Caller sets these.
 local hotkey_blocklist = {}
 
+-- Screen-space rectangles where mouse events are IGNORED (e.g. our own UI
+-- window, the macOS menubar). Caller refreshes via M.set_dead_zones.
+local dead_zones = {}
+
 local function now_ms()
   return hs.timer.secondsSinceEpoch() * 1000
 end
@@ -86,6 +90,15 @@ local function key_name_for_keycode(keycode)
   return tostring(keycode)
 end
 
+local function in_dead_zone(x, y)
+  for _, z in ipairs(dead_zones) do
+    if x >= z.x and x < z.x + z.w and y >= z.y and y < z.y + z.h then
+      return true
+    end
+  end
+  return false
+end
+
 local function is_hotkey_combo(keycode, flags)
   for _, h in ipairs(hotkey_blocklist) do
     if h.keycode == keycode
@@ -107,6 +120,7 @@ local function handle_event(e)
   if etype == types.leftMouseDown or etype == types.leftMouseUp
   or etype == types.rightMouseDown or etype == types.rightMouseUp
   or etype == types.otherMouseDown or etype == types.otherMouseUp then
+    if in_dead_zone(pos.x, pos.y) then return false end
     local button = 'left'
     if etype == types.rightMouseDown or etype == types.rightMouseUp then
       button = 'right'
@@ -128,6 +142,7 @@ local function handle_event(e)
       or etype == types.leftMouseDragged
       or etype == types.rightMouseDragged
       or etype == types.otherMouseDragged then
+    if in_dead_zone(pos.x, pos.y) then return false end
     local t = now_ms()
     if t - last_move_ts >= MOUSE_MOVE_MIN_MS then
       last_move_ts = t
@@ -149,6 +164,7 @@ local function handle_event(e)
     })
 
   elseif etype == types.scrollWheel then
+    if in_dead_zone(pos.x, pos.y) then return false end
     -- API: scrollWheelEventDeltaAxis1 (vertical), Axis2 (horizontal)
     local dy = e:getProperty(hs.eventtap.event.properties.scrollWheelEventDeltaAxis1) or 0
     local dx = e:getProperty(hs.eventtap.event.properties.scrollWheelEventDeltaAxis2) or 0
@@ -168,6 +184,10 @@ end
 
 function M.set_hotkey_blocklist(list)
   hotkey_blocklist = list or {}
+end
+
+function M.set_dead_zones(zones)
+  dead_zones = zones or {}
 end
 
 function M.start(sequence, opts)

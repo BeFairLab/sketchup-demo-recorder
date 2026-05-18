@@ -138,4 +138,11 @@ function M.is_open()
   return view ~= nil
 end
 
+-- Returns the webview's current frame {x, y, w, h} or nil if closed.
+function M.window_frame()
+  if not view then return nil end
+  local f = view:frame()
+  return f and { x = f.x, y = f.y, w = f.w, h = f.h } or nil
+end
+
 return M
