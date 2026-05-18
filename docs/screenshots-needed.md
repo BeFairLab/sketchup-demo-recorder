@@ -12,8 +12,9 @@ chrome (title bar) intact — keeps the "real app" feel.
 | 4 | Tour: Playback (Block 3) | `sdr-04-tour-preset-playback.png` | Preset Settings → Playback card with auto-path ON, speed 1000, easing Ease in-out, click circles ON, keystrokes ON, both delays checked at 1000 ms. |
 | 5 | Tour: Output (Block 3) | `sdr-05-tour-preset-output.png` | Preset Settings, two Output cards visible together (non-universal + universal), Auto-crop checkbox ON, both Resolution dropdowns showing a chosen preset. |
 | 6 | Tour: Manage (Block 3) | `sdr-06-tour-manage.png` | Manage tab with 3-5 preset rows + 3-5 timeline rows. Each timeline row shows the `(N events, preset: …)` meta. |
-| 7 | Overlay + safe zones (Block 5) | `sdr-07-overlay-safe-zones.png` | Screenshot of SketchUp with the recording overlay visible — red outer frame + the two safe-zone rectangles (yellow YouTube + red Reels) overlaid on a real SU scene. Use the Universal 1920×1920 preset so both zones fit cleanly. |
-| 8 | Three-file output (Block 5) | `sdr-08-three-outputs.png` | Finder window OR collage showing the source `.mov` and the two derivative `_youtube_*.mp4` + `_reels_*.mp4` files side by side. A composite is fine. |
+| 6.5 | Viewport vs Window mode (Block 3) | `sdr-065-viewport-vs-window.png` | Side-by-side composite: left frame = an mp4 captured in `Viewport` mode (clean 3D model only, no SU chrome); right frame = same scene captured in `Window` mode (full SU window with toolbars + status bar visible). Caption: "Same scene, two capture modes." |
+| 7 | Overlay + safe zones (Block 6) | `sdr-07-overlay-safe-zones.png` | Screenshot of SketchUp with the recording overlay visible — red outer frame + the two safe-zone rectangles (yellow YouTube + red Reels) overlaid on a real SU scene. Use the Universal 1920×1920 preset so both zones fit cleanly. |
+| 8 | Three-file output (Block 6) | `sdr-08-three-outputs.png` | Finder window OR collage showing the source `.mov` and the two derivative `_youtube_*.mp4` + `_reels_*.mp4` files side by side. A composite is fine. |
 | 9 | OG / social image | `sdr-og-1200x630.png` | 1200×630. Recommended layout: timeline UI on the left, the words "Fair SketchUp Demo Recorder · open source, MIT" on the right. Use the peach accent. |
 
 ## Optional but nice

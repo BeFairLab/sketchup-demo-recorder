@@ -11,11 +11,11 @@ Drop these values into `/admin` → New Project. Fields below match
 |---|---|
 | `title` | Fair SketchUp Demo Recorder |
 | `slug` | fair-sketchup-demo-recorder |
-| `subtitle` | Record clicks once, replay on a clean robot path, ship YouTube + Reels in one capture. |
+| `subtitle` | Pixel-perfect viewport or whole-window capture, robot-path replay, YouTube + Reels in one take. |
 | `type` | Tool |
 | `status` | Beta |
 | `displayDate` | 2026-05-18 |
-| `shortDescription` | A macOS recorder for SketchUp demo videos: capture clicks, replay on a straight-line auto-path, output YouTube + Reels mp4 from a single take. |
+| `shortDescription` | macOS tool for SketchUp demo videos. Captures the model viewport at exact target pixels (or the whole window), records clicks, replays as smooth robot motion, outputs YouTube + Reels mp4 from one take. |
 | `tags` | macos, hammerspoon, sketchup, automation, ai-built, video |
 | `icon` | upload `befairlab-icon.svg` (in this folder) |
 | `cta.primary` | `{ label: "Source on GitHub", url: "https://github.com/BeFairLab/sketchup-demo-recorder" }` |
@@ -49,7 +49,21 @@ Drop these values into `/admin` → New Project. Fields below match
     >
     > This tool collapses that loop. Record once. Edit the click timing as plain numbers in a timeline. Replay as smooth, straight-line cursor motion. Capture. If you set up the **Universal** preset, you get both a 16:9 and a 9:16 video from one capture.
 
-### Block 3 — `Tour`
+### Block 3 — `Viewport or Window mode`
+
+- `description`: One toggle that decides whether the recording captures the clean 3D model area or the whole SketchUp window.
+- items:
+  - `text` —
+    > Every preset chooses one of two capture modes:
+    >
+    > **Viewport (model area)** — the recorder uses SketchUp's own `Sketchup.resize_viewport(model, w, h)` API to size the model area to *exactly* the target pixel dimensions (e.g. 1920×1080). The capture region locks onto that area only. No title bar, no toolbar, no panels, no menu. The output mp4 is pure 3D content, frame-perfect at the requested resolution.
+    >
+    > **Window** — the whole SketchUp window is resized to the target W×H and the capture region matches the full window frame. Toolbars, the side panels, and the status bar all end up in the video. Use this for tutorials where you need to show "click *this* button".
+    >
+    > This is the feature most other screen-record-then-crop tools don't give you. You don't shoot in 4K and crop down hoping the bezel didn't drift; you set the viewport once, hit Apply, and SketchUp resizes itself to make the math exact.
+  - `image` — side-by-side: Viewport mode mp4 frame (clean model) vs Window mode mp4 frame (full SU UI). Same camera, same model. Caption: "Same scene, two modes. Pick what your video needs."
+
+### Block 4 — `Tour`
 
 - `description`: The recorder is four tabs.
 - items:
@@ -59,7 +73,7 @@ Drop these values into `/admin` → New Project. Fields below match
   - `image` — Preset Settings → Output (universal + auto-crop). Caption: "Universal presets capture a square area; ffmpeg crops YouTube and Reels variants automatically."
   - `image` — Manage tab. Caption: "List, rename, export, delete presets and timelines."
 
-### Block 4 — `Auto-path, click circles, keystrokes`
+### Block 5 — `Auto-path, click circles, keystrokes`
 
 - items:
   - `text` —
@@ -68,7 +82,7 @@ Drop these values into `/admin` → New Project. Fields below match
     > Click circles render an expanding ring at every click, in the captured video. The keystroke overlay shows a `⌘ Z` style pill in the corner — using a fixed English ANSI keymap so it reads the same whether the input layout was Cyrillic, Hebrew, anything.
   - `video` — short clip (3-5 s) of replay with circles + keystrokes visible. Caption: "Replay with click circles and keystroke overlay, captured straight from screencapture."
 
-### Block 5 — `Universal preset + auto-crop`
+### Block 6 — `Universal preset + auto-crop`
 
 - items:
   - `text` —
@@ -78,7 +92,7 @@ Drop these values into `/admin` → New Project. Fields below match
   - `image` — overlay screenshot showing the two safe zones inside a 1920×1920 square.
   - `image` — side-by-side: full source mp4, YouTube crop, Reels crop. Caption: "One capture, three files."
 
-### Block 6 — `How it talks to SketchUp`
+### Block 7 — `How it talks to SketchUp`
 
 - items:
   - `text` —
@@ -87,7 +101,7 @@ Drop these values into `/admin` → New Project. Fields below match
     > A tiny Ruby companion plugin lives inside SketchUp. It polls a file in `/tmp/`. When Hammerspoon needs to set the viewport to an exact pixel size, it writes a JSON command; the companion calls `Sketchup.resize_viewport(model, w, h)`. No sockets, no permissions to grant on the SketchUp side beyond enabling the extension.
   - `image` — small architecture diagram (optional; defer if no time).
 
-### Block 7 — `Let's be fair: how AI helped`
+### Block 8 — `Let's be fair: how AI helped`
 
 - items:
   - `text` —
@@ -101,7 +115,7 @@ Drop these values into `/admin` → New Project. Fields below match
     >
     > We didn't ship anything until the human had run the full take end-to-end. The AI didn't know the SketchUp pixel-vs-point Retina trap until the human saw a 480×270 region when it should have been 960×540 and reported it. The AI fixed it in the next message.
 
-### Block 8 — `Get it`
+### Block 9 — `Get it`
 
 - items:
   - `text` —
