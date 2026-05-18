@@ -43,6 +43,7 @@
     },
     sequence_updated: (seq) => {
       currentSeq = seq;
+      markTimelineDirty();
       renderTimeline();
       updateActiveLabels();
     },
@@ -63,6 +64,7 @@
   let activePresetName = null;  // header's chosen preset (drives Apply to SketchUp)
   let editingPreset = null;     // {name, viewport, playback, output, ...} — Preset Settings tab only
   let editingPresetDirty = false;
+  let timelineDirty = false;    // tracks unsaved changes to events OR preset link
 
   function defaultPresetBody() {
     return {
@@ -99,6 +101,23 @@
     updateDirtyBadge();
   }
 
+  function updateTimelineDirtyBadge() {
+    const el = document.getElementById('timeline-dirty');
+    if (!el) return;
+    el.textContent = timelineDirty ? '● Unsaved changes' : '';
+    el.style.color = timelineDirty ? '#d70015' : '';
+  }
+  function markTimelineDirty() {
+    if (!currentSeq) return;
+    timelineDirty = true;
+    updateTimelineDirtyBadge();
+  }
+  function confirmDiscardTimelineDirty() {
+    if (!timelineDirty) return true;
+    return confirm('Timeline "' + (currentSeq && currentSeq.name) +
+      '" has unsaved changes. Discard?');
+  }
+
   function updateActiveLabels() {
     const pa = document.getElementById('preset-active');
     if (pa) pa.textContent = currentSeq && currentSeq.preset_name ? currentSeq.preset_name : '— none —';
@@ -128,31 +147,38 @@
 
   async function refreshPresetList() {
     const list = await callLua('list_presets', {});
-    const buildOptions = (sel) => {
+    const buildOptions = (sel, defaultVal) => {
       if (!sel) return;
-      sel.innerHTML = '<option value="">— choose preset —</option>';
+      sel.innerHTML = '<option value="">— none —</option>';
       (list || []).forEach((n) => {
         const o = document.createElement('option'); o.value = n; o.textContent = n;
         sel.appendChild(o);
       });
-      if (currentSeq && currentSeq.preset_name) sel.value = currentSeq.preset_name;
+      if (defaultVal) sel.value = defaultVal;
     };
-    buildOptions(document.getElementById('preset-select'));
-    buildOptions(document.getElementById('preset-select-edit'));
+    const linkedName = currentSeq && currentSeq.preset_name;
+    buildOptions(document.getElementById('preset-select'), linkedName);
+    buildOptions(document.getElementById('preset-select-edit'), null);
+    buildOptions(document.getElementById('seq-preset-link'), linkedName);
   }
 
   async function loadSequence(name) {
     if (!name) return;
+    if (!confirmDiscardTimelineDirty()) return;
     const seq = await callLua('load_sequence', { name });
     currentSeq = seq;
+    timelineDirty = false;
+    updateTimelineDirtyBadge();
     renderTimeline();
     updateActiveLabels();
     if (seq.preset_name) {
       document.getElementById('preset-select').value = seq.preset_name;
+      document.getElementById('seq-preset-link').value = seq.preset_name;
       activePresetName = seq.preset_name;
+    } else {
+      document.getElementById('seq-preset-link').value = '';
     }
-    // NOTE: do NOT populate preset-tab controls here — that's the editor's
-    // domain (use preset-select-edit on the Preset Settings tab).
+    // Preset-tab controls are NOT populated here — they live in the editor.
   }
 
   async function loadPresetIntoCurrentSeq(name) {
@@ -397,6 +423,7 @@
       pauseInput.type = 'number'; pauseInput.value = evt.pause_before_ms || 0; pauseInput.min = 0;
       pauseInput.addEventListener('change', () => {
         evt.pause_before_ms = parseInt(pauseInput.value, 10) || 0;
+        markTimelineDirty();
         renderTimeline();
       });
       pauseChip.appendChild(pauseInput);
@@ -423,10 +450,10 @@
           const choice = prompt('Action: (d)elete  (c)omment  (s)kip', 'c');
           if (choice === 'd') {
             const idx = (currentSeq.events || []).indexOf(evt);
-            if (idx >= 0) { currentSeq.events.splice(idx, 1); renderTimeline(); }
+            if (idx >= 0) { currentSeq.events.splice(idx, 1); markTimelineDirty(); renderTimeline(); }
           } else if (choice === 'c') {
             const c = prompt('Comment:', evt.comment || '');
-            if (c !== null) { evt.comment = c; renderTimeline(); }
+            if (c !== null) { evt.comment = c; markTimelineDirty(); renderTimeline(); }
           }
         });
       }
@@ -522,6 +549,8 @@
   document.getElementById('btn-save-timeline').addEventListener('click', async () => {
     if (!currentSeq) return;
     await callLua('save_timeline', { sequence: currentSeq });
+    timelineDirty = false;
+    updateTimelineDirtyBadge();
     document.getElementById('last-output').textContent = 'saved ' + currentSeq.name;
   });
 
@@ -530,8 +559,25 @@
     if (!confirm('Clear all events from "' + currentSeq.name + '"?')) return;
     currentSeq.events = [];
     renderTimeline();
-    await callLua('save_timeline', { sequence: currentSeq });
-    document.getElementById('last-output').textContent = 'cleared events';
+    markTimelineDirty();
+  });
+
+  // Linked-preset selector on the timeline tab.
+  document.getElementById('seq-preset-link').addEventListener('change', async (e) => {
+    if (!currentSeq) return alert('load a timeline first');
+    const name = e.target.value || null;
+    currentSeq.preset_name = name;
+    // Mirror to header active preset.
+    document.getElementById('preset-select').value = name || '';
+    activePresetName = name;
+    // Apply preset's settings to currentSeq so they take effect for capture
+    // without waiting for an explicit Save.
+    if (name) {
+      const r = await callLua('apply_preset', { name }).catch(() => null);
+      if (r && r.sequence) currentSeq = r.sequence;
+    }
+    markTimelineDirty();
+    updateActiveLabels();
   });
 
   // Build a "preset envelope" from current UI controls (works WITHOUT a
@@ -698,8 +744,7 @@
     if (!confirm(`Drop ${dropped} mouse_move events?`)) return;
     currentSeq.events = out;
     currentSeq.events.forEach((e, i) => { e.id = 'evt_' + String(i + 1).padStart(4, '0'); });
-    readPlaybackFromUI();
-    await callLua('save_timeline', { sequence: currentSeq });
+    markTimelineDirty();
     renderTimeline();
   });
 

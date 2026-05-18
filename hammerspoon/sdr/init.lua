@@ -170,13 +170,17 @@ local function register_handlers()
     return { saved = true }
   end)
 
-  -- Save ONLY the events (and minimal meta) — preserves preset settings on disk.
+  -- Save ONLY the events + preset_name link. Viewport/playback/output live
+  -- in the linked preset file and are reloaded from there on load_sequence.
   ui.register('save_timeline', function(payload)
     local seq = payload.sequence
     if not seq then return { error = 'no sequence' } end
     local existing = store.load(seq.name) or store.new_sequence(seq.name)
     existing.events = seq.events or {}
     existing.name = seq.name
+    -- BUGFIX: persist the preset link too. Without this, header preset changes
+    -- never stuck across sessions.
+    existing.preset_name = seq.preset_name or existing.preset_name
     store.save(seq.name, existing)
     current_seq = existing
     current_seq_name = seq.name
@@ -358,10 +362,8 @@ local function register_handlers()
   ui.register('stop_record', function(_)
     local ok, seq = recorder.stop()
     set_status('idle')
-    if seq and current_seq_name then
-      store.save(current_seq_name, seq)
-      ui.push('sequence_updated', seq)
-    end
+    -- Push the new events but do NOT auto-save; UI marks dirty for explicit Save.
+    if seq then ui.push('sequence_updated', seq) end
     return { stopped = true, events = current_seq and #current_seq.events or 0 }
   end)
 
@@ -516,8 +518,9 @@ local function bind_hotkeys()
       if recorder.is_recording() then
         local _, seq = recorder.stop()
         set_status('idle')
-        if seq and current_seq_name then store.save(current_seq_name, seq) end
-        notify('SDR', 'Recording stopped (' .. (seq and #seq.events or 0) .. ' events)')
+        -- Don't auto-save: hand seq back to UI which will mark dirty so user
+        -- explicitly clicks 'Save changes'. Prevents accidental overwrites.
+        notify('SDR', 'Recording stopped (' .. (seq and #seq.events or 0) .. ' events) — Save to persist')
         ui.push('sequence_updated', seq)
       else
         if not current_seq then notify('SDR', 'Load a sequence first'); return end
