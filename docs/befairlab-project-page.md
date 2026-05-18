@@ -46,7 +46,9 @@ Asset roots in this repo:
 - items:
   - `text` —
     > **Fair SketchUp Demo Recorder** is a macOS tool we built to make SketchUp demo videos repeatable. Click through the demo once. The tool stores every event. Replay any time, capture the screen, and end up with a clean mp4 — including one YouTube cut and one Reels cut from the same take, if you want.
-  - `image` — `docs/assets/screenshots/01-timeline.png` · alt: "Timeline tab with recorded events." · caption: "The Timeline tab: pause chips between events; click an event for delete / skip / insert pause / comment."
+  - `carousel` — two slides:
+    1. `docs/assets/screenshots/01-timeline.png` · alt: "Timeline tab with recorded events." · caption: "The Timeline tab: pause chips between every event."
+    2. `docs/assets/screenshots/02-timeline-skipped-commented.png` · alt: "Timeline with skipped events and comments." · caption: "Edit in place: skip events without deleting, add comments that show on the chip, insert pauses anywhere."
 
 ### Block 2 — `Why we built it`
 

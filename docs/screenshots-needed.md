@@ -8,6 +8,7 @@ All assets live under `docs/assets/screenshots/`. Icons under
 | Block | File | Source |
 |---|---|---|
 | 1 Hero | `01-timeline.png` | from Desktop dropbox |
+| 1 Edit-in-place | `02-timeline-skipped-commented.png` | from Desktop dropbox |
 | 1 alt (video) | `01-demo.mp4` | from Desktop dropbox |
 | 3 Viewport-vs-Window | `03b-mode-viewport.png` + `03c-mode-window.png` (carousel) | Desktop dropbox |
 | 4 Tour — Viewport | `03-preset-viewport.png` | Desktop dropbox |
