@@ -136,17 +136,18 @@
           <span class="muted">Universal custom crop targets (in source pixels):</span>
         </div>
         <div class="row">
-          <span class="lbl">Horizontal (YouTube)</span>
+          <span>Horizontal (YouTube)</span>
           <label>W <input type="number" id="uc-yt-w" value="1920" style="width:90px"></label>
           <label>H <input type="number" id="uc-yt-h" value="1080" style="width:90px"></label>
         </div>
         <div class="row">
-          <span class="lbl">Vertical (Reels)</span>
+          <span>Vertical (Reels)</span>
           <label>W <input type="number" id="uc-rl-w" value="1080" style="width:90px"></label>
           <label>H <input type="number" id="uc-rl-h" value="1920" style="width:90px"></label>
         </div>
       </div>
 
+      <div class="section-sep"></div>
       <div class="row">
         <label>Capture area shift X
           <input type="number" id="overlay-shift-x" value="0" step="1" style="width:80px">
@@ -186,22 +187,14 @@
       </div>
 
       <div class="row">
-        <span class="lbl">Pre-delay</span>
-        <label><input type="radio" name="pre-delay-radio" value="0"> 0</label>
-        <label><input type="radio" name="pre-delay-radio" value="500"> 500ms</label>
-        <label><input type="radio" name="pre-delay-radio" value="1000" checked> 1s</label>
-        <label><input type="radio" name="pre-delay-radio" value="2000"> 2s</label>
-        <label><input type="radio" name="pre-delay-radio" value="custom"> Custom</label>
-        <input type="number" id="pre-delay-ms" value="1000" min="0" step="50" style="width:90px"> ms
+        <label><input type="checkbox" id="pre-delay-enabled" checked> Pre-delay
+          <input type="number" id="pre-delay-ms" value="1000" min="0" step="100" style="width:100px"> ms
+        </label>
       </div>
       <div class="row">
-        <span class="lbl">Post-delay</span>
-        <label><input type="radio" name="post-delay-radio" value="0"> 0</label>
-        <label><input type="radio" name="post-delay-radio" value="500"> 500ms</label>
-        <label><input type="radio" name="post-delay-radio" value="1000" checked> 1s</label>
-        <label><input type="radio" name="post-delay-radio" value="2000"> 2s</label>
-        <label><input type="radio" name="post-delay-radio" value="custom"> Custom</label>
-        <input type="number" id="post-delay-ms" value="1000" min="0" step="50" style="width:90px"> ms
+        <label><input type="checkbox" id="post-delay-enabled" checked> Post-delay
+          <input type="number" id="post-delay-ms" value="1000" min="0" step="100" style="width:100px"> ms
+        </label>
       </div>
     </section>
 
@@ -234,8 +227,7 @@
         <label><input type="checkbox" id="auto-crop-universal"> Auto-crop → YouTube + Reels mp4</label>
       </div>
       <div class="row">
-        <span class="lbl">Horizontal (YouTube)</span>
-        <label>Resolution
+        <label>Horizontal (YouTube) resolution
           <select id="rescale-yt-preset">
             <option value="480"  data-w="854"  data-h="480">480p — 854×480</option>
             <option value="720"  data-w="1280" data-h="720">720p — 1280×720</option>
@@ -251,8 +243,7 @@
         <label>H <input type="number" id="rescale-yt-h" value="1080" min="0" style="width:90px"></label>
       </div>
       <div class="row">
-        <span class="lbl">Vertical (Reels)</span>
-        <label>Resolution
+        <label>Vertical (Reels) resolution
           <select id="rescale-rl-preset">
             <option value="480"  data-w="270"  data-h="480">480p — 270×480</option>
             <option value="720"  data-w="406"  data-h="720">720p — 406×720</option>

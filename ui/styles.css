@@ -142,5 +142,6 @@ button.primary:hover { background: #006fe0; }
 .danger-btn:hover { background: #ffe5e5; }
 
 .lbl { display: inline-block; min-width: 160px; color: #555; font-size: 12px; }
+.section-sep { height: 12px; }
 a { color: #007aff; text-decoration: none; }
 a:hover { text-decoration: underline; }

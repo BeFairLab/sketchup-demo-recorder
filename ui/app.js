@@ -237,8 +237,8 @@
     const postMs = (pb.post_delay_ms != null) ? pb.post_delay_ms : 1000;
     document.getElementById('pre-delay-ms').value  = preMs;
     document.getElementById('post-delay-ms').value = postMs;
-    setRadioByValue('pre-delay-radio',  String(preMs));
-    setRadioByValue('post-delay-radio', String(postMs));
+    document.getElementById('pre-delay-enabled').checked  = preMs > 0;
+    document.getElementById('post-delay-enabled').checked = postMs > 0;
 
     const out = ep.output || {};
     document.getElementById('auto-crop-universal').checked = out.auto_crop_universal === true;
@@ -252,19 +252,6 @@
     selectResolutionPreset('rescale-preset', out.rescale_w, out.rescale_h);
     selectResolutionPreset('rescale-yt-preset', out.rescale_youtube_w, out.rescale_youtube_h);
     selectResolutionPreset('rescale-rl-preset', out.rescale_reels_w, out.rescale_reels_h);
-  }
-
-  function setRadioByValue(groupName, value) {
-    const radios = document.querySelectorAll('input[name=' + groupName + ']');
-    let matched = false;
-    radios.forEach(r => {
-      if (r.value === value) { r.checked = true; matched = true; }
-      else r.checked = false;
-    });
-    if (!matched) {
-      // No preset matches → check the 'custom' radio
-      radios.forEach(r => { if (r.value === 'custom') r.checked = true; });
-    }
   }
 
   function selectResolutionPreset(selectId, w, h) {
@@ -306,8 +293,10 @@
     editingPreset.playback.auto_path_easing   = document.getElementById('auto-path-easing').value || 'in_out';
     editingPreset.playback.show_click_effects = document.getElementById('click-effects').checked;
     editingPreset.playback.show_keystrokes    = document.getElementById('show-keystrokes').checked;
-    editingPreset.playback.pre_delay_ms       = parseInt(document.getElementById('pre-delay-ms').value, 10);
-    editingPreset.playback.post_delay_ms      = parseInt(document.getElementById('post-delay-ms').value, 10);
+    editingPreset.playback.pre_delay_ms       = document.getElementById('pre-delay-enabled').checked
+      ? (parseInt(document.getElementById('pre-delay-ms').value, 10) || 0) : 0;
+    editingPreset.playback.post_delay_ms      = document.getElementById('post-delay-enabled').checked
+      ? (parseInt(document.getElementById('post-delay-ms').value, 10) || 0) : 0;
     editingPreset.output = editingPreset.output || {};
     editingPreset.output.auto_crop_universal = document.getElementById('auto-crop-universal').checked;
     editingPreset.output.rescale   = document.getElementById('auto-rescale').checked;
@@ -682,27 +671,9 @@
    'rescale-yt-w', 'rescale-yt-h', 'rescale-rl-w', 'rescale-rl-h']
     .forEach((id) => document.getElementById(id).addEventListener('change', markEditingDirty));
 
-  // Pre/post-delay radios: clicking a preset value populates the number input.
-  document.querySelectorAll('input[name=pre-delay-radio]').forEach((r) => {
-    r.addEventListener('change', () => {
-      if (r.value !== 'custom') document.getElementById('pre-delay-ms').value = r.value;
-      markEditingDirty();
-    });
-  });
-  document.querySelectorAll('input[name=post-delay-radio]').forEach((r) => {
-    r.addEventListener('change', () => {
-      if (r.value !== 'custom') document.getElementById('post-delay-ms').value = r.value;
-      markEditingDirty();
-    });
-  });
-  // Custom ms input → switch radio to custom.
-  document.getElementById('pre-delay-ms').addEventListener('input', () => {
-    setRadioByValue('pre-delay-radio', document.getElementById('pre-delay-ms').value);
-    markEditingDirty();
-  });
-  document.getElementById('post-delay-ms').addEventListener('input', () => {
-    setRadioByValue('post-delay-radio', document.getElementById('post-delay-ms').value);
-    markEditingDirty();
+  // Pre/post-delay enabled checkboxes — toggle the input.
+  ['pre-delay-enabled', 'post-delay-enabled'].forEach((id) => {
+    document.getElementById(id).addEventListener('change', markEditingDirty);
   });
 
   // Resolution preset selectors → populate W/H inputs.
