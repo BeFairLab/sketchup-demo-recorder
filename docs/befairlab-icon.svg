@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Fair SketchUp Demo Recorder — befairlab.com project icon.
+  Brand: ink #0c0a09 on transparent background, hairline strokes,
+  square corners. 1:1 (square) per CONTENT-GUIDE § 3.
+
+  Concept:
+    A SketchUp viewport (rounded SU window outline) with a
+    "record" dot inside, and a small timeline strip across the
+    bottom representing the click-event chips.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256" fill="none">
+  <!-- Outer frame: hairline window -->
+  <rect x="16" y="24" width="224" height="208" stroke="#0c0a09" stroke-width="2"/>
+
+  <!-- Title bar divider -->
+  <line x1="16" y1="56" x2="240" y2="56" stroke="#0c0a09" stroke-width="2"/>
+
+  <!-- Three traffic-light dots in the title bar (square in our design system) -->
+  <rect x="28"  y="38" width="8" height="8" fill="#0c0a09"/>
+  <rect x="44"  y="38" width="8" height="8" fill="#0c0a09"/>
+  <rect x="60"  y="38" width="8" height="8" fill="#0c0a09"/>
+
+  <!-- Viewport (model area) — implied square inset -->
+  <rect x="40" y="76" width="176" height="100" stroke="#0c0a09" stroke-width="2"/>
+
+  <!-- Record dot: filled circle, lower-left of the viewport -->
+  <circle cx="60" cy="160" r="6" fill="#0c0a09"/>
+
+  <!-- 3D model glyph inside viewport: simple isometric cube -->
+  <g stroke="#0c0a09" stroke-width="2" stroke-linejoin="miter" fill="none">
+    <!-- back -->
+    <polyline points="128,88 152,100 152,128 128,140 104,128 104,100 128,88"/>
+    <!-- verticals -->
+    <line x1="128" y1="88"  x2="128" y2="116"/>
+    <line x1="104" y1="100" x2="128" y2="116"/>
+    <line x1="152" y1="100" x2="128" y2="116"/>
+    <line x1="128" y1="116" x2="128" y2="140"/>
+  </g>
+
+  <!-- Timeline strip across the bottom: 7 ticks representing events -->
+  <g stroke="#0c0a09" stroke-width="2">
+    <line x1="40"  y1="200" x2="216" y2="200"/>
+  </g>
+  <g fill="#0c0a09">
+    <rect x="48"  y="204" width="12" height="12"/>
+    <rect x="68"  y="204" width="6"  height="12"/>
+    <rect x="82"  y="204" width="12" height="12"/>
+    <rect x="102" y="204" width="20" height="12"/>
+    <rect x="130" y="204" width="6"  height="12"/>
+    <rect x="144" y="204" width="24" height="12"/>
+    <rect x="176" y="204" width="12" height="12"/>
+    <rect x="196" y="204" width="12" height="12"/>
+  </g>
+</svg>
