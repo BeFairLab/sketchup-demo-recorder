@@ -34,26 +34,29 @@ end
 --
 -- opts.rescale_youtube = { w, h } and opts.rescale_reels = { w, h } —
 -- optional per-variant rescale targets applied after crop.
+-- opts.custom_crops = { youtube={w,h}, reels={w,h} } — override crop dims
+-- for the 'universal_custom' preset.
 --
 -- IMPORTANT: SketchUp clamps viewport height to fit the display, so the
 -- captured .mov can be SMALLER than the requested preset (e.g. universal_2160
 -- requested 2160×2160 px but lands on 2160×2044 on a 1117pt-high display).
--- Hardcoded crop offsets miss center. We use ffmpeg expressions so the crop
--- is centered relative to the ACTUAL input dimensions (iw/ih), and clamped
--- so we never request a crop larger than the source — that would 0-byte the
--- output mp4.
+-- We use ffmpeg expressions to center the crop on ACTUAL input dimensions
+-- and clamp so we never request a crop larger than the source.
 function M.split_universal(in_path, preset, opts, on_done)
   opts = opts or {}
   local crops = {}
-  if preset == 'universal_1920' then
+  if preset == 'universal_1920' or preset == 'universal_2160' then
     crops = {
       { name = 'youtube', target_w = 1920, target_h = 1080, rescale = opts.rescale_youtube },
       { name = 'reels',   target_w = 1080, target_h = 1920, rescale = opts.rescale_reels   },
     }
-  elseif preset == 'universal_2160' then
+  elseif preset == 'universal_custom' then
+    local cc = opts.custom_crops or {}
+    local yt = cc.youtube or { w = 1920, h = 1080 }
+    local rl = cc.reels   or { w = 1080, h = 1920 }
     crops = {
-      { name = 'youtube', target_w = 1920, target_h = 1080, rescale = opts.rescale_youtube },
-      { name = 'reels',   target_w = 1080, target_h = 1920, rescale = opts.rescale_reels   },
+      { name = 'youtube', target_w = yt.w, target_h = yt.h, rescale = opts.rescale_youtube },
+      { name = 'reels',   target_w = rl.w, target_h = rl.h, rescale = opts.rescale_reels   },
     }
   else
     on_done(false, in_path, 'unknown universal preset: ' .. tostring(preset))

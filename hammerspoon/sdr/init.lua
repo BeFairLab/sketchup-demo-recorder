@@ -61,21 +61,23 @@ local function keystroke_anchor_for(vp)
   local pad = 18
   local label_h = 44
   -- For universal presets, anchor at the bottom-left of the YouTube∩Reels
-  -- intersection (smaller dimension of each safe zone = 540 / 540 etc.).
-  if vp.preset == 'universal_1920' then
-    -- Source 1920×1920 px = 960×960 pt. YouTube 960×540 pt. Reels 540×960 pt.
-    -- Intersection = 540×540 pt centered.
-    local ix = r.x + (r.w - 540) / 2
-    local iy = r.y + (r.h - 540) / 2
-    return { x = ix + pad, y = iy + 540 - pad - label_h }
-  elseif vp.preset == 'universal_2160' then
-    -- Intersection = 540×540 pt centered.
-    local ix = r.x + (r.w - 540) / 2
-    local iy = r.y + (r.h - 540) / 2
-    return { x = ix + pad, y = iy + 540 - pad - label_h }
-  else
-    return { x = r.x + pad, y = r.y + r.h - pad - label_h }
+  -- intersection (smaller of the two dimensions per axis = safe across both).
+  local intersect_w, intersect_h = nil, nil
+  if vp.preset == 'universal_1920' or vp.preset == 'universal_2160' then
+    intersect_w, intersect_h = 540, 540
+  elseif vp.preset == 'universal_custom' then
+    local uc = vp.universal_custom or {}
+    local yt = uc.youtube or { w = 1920, h = 1080 }
+    local rl = uc.reels   or { w = 1080, h = 1920 }
+    intersect_w = math.min(yt.w, rl.w) / 2
+    intersect_h = math.min(yt.h, rl.h) / 2
   end
+  if intersect_w and intersect_h then
+    local ix = r.x + (r.w - intersect_w) / 2
+    local iy = r.y + (r.h - intersect_h) / 2
+    return { x = ix + pad, y = iy + intersect_h - pad - label_h }
+  end
+  return { x = r.x + pad, y = r.y + r.h - pad - label_h }
 end
 
 -- Safe-frame overlays for crop-target previewing. Returns nil for non-universal
@@ -83,19 +85,19 @@ end
 -- the recording region.
 local function safe_frames_for(vp)
   if not vp then return nil end
-  -- Retina = 2 on built-in display; converts px → pt for canvas sizing.
-  -- YouTube 16:9 1920×1080 px = 960×540 pt. Reels 9:16 1080×1920 px = 540×960 pt.
-  if vp.preset == 'universal_1920' then
-    -- Source 1920×1920 px = 960×960 pt — both safe zones fit EXACTLY.
+  -- Retina = 2; convert pixel dims to canvas points by dividing by 2.
+  if vp.preset == 'universal_1920' or vp.preset == 'universal_2160' then
     return {
       { name = 'YouTube 16:9', w = 960, h = 540, color = { 1.0, 0.85, 0.20 } },
       { name = 'Reels 9:16',   w = 540, h = 960, color = { 1.0, 0.35, 0.35 } },
     }
-  elseif vp.preset == 'universal_2160' then
-    -- Source 2160×2160 px = 1080×1080 pt; safe zones same pixel dims.
+  elseif vp.preset == 'universal_custom' then
+    local uc = vp.universal_custom or {}
+    local yt = uc.youtube or { w = 1920, h = 1080 }
+    local rl = uc.reels   or { w = 1080, h = 1920 }
     return {
-      { name = 'YouTube 16:9', w = 960, h = 540, color = { 1.0, 0.85, 0.20 } },
-      { name = 'Reels 9:16',   w = 540, h = 960, color = { 1.0, 0.35, 0.35 } },
+      { name = 'YouTube', w = yt.w / 2, h = yt.h / 2, color = { 1.0, 0.85, 0.20 } },
+      { name = 'Reels',   w = rl.w / 2, h = rl.h / 2, color = { 1.0, 0.35, 0.35 } },
     }
   end
   return nil
@@ -455,11 +457,16 @@ local function register_handlers()
         tostring(preset), tostring(out.auto_crop_universal),
         tostring(out.rescale), hs.inspect(out))
 
-      if out.auto_crop_universal and (preset == 'universal_1920' or preset == 'universal_2160') then
+      if out.auto_crop_universal and (preset == 'universal_1920' or preset == 'universal_2160' or preset == 'universal_custom') then
         set_status('capturing')
+        local custom_crops = nil
+        if preset == 'universal_custom' and seq.viewport and seq.viewport.universal_custom then
+          custom_crops = seq.viewport.universal_custom
+        end
         post.split_universal(path, preset, {
           rescale_youtube = rs_yt,
           rescale_reels   = rs_rl,
+          custom_crops    = custom_crops,
         }, function(_, _, outputs)
           set_status('idle')
           ui.push('capture_done', { path = path, size = size, post = outputs })

@@ -124,11 +124,21 @@
             <option value="square_1080"    data-w="1080" data-h="1080">Square 1080×1080</option>
             <option value="universal_1920" data-w="1920" data-h="1920">Universal Square 1920×1920 (no clamp)</option>
             <option value="universal_2160" data-w="2160" data-h="2160">Universal Square 2160×2160 (slight clamp)</option>
+            <option value="universal_custom" data-w="1920" data-h="1920">Universal Custom (editable below)</option>
             <option value="custom" data-w="" data-h="">Custom…</option>
           </select>
         </label>
         <label>W <input type="number" id="vp-w" value="1920" style="width:80px"></label>
         <label>H <input type="number" id="vp-h" value="1080" style="width:80px"></label>
+      </div>
+      <div class="row" id="universal-custom-editor" hidden>
+        <span class="muted">Universal Custom crop targets (pixels). Source uses W × H above.</span>
+      </div>
+      <div class="row" id="universal-custom-editor-fields" hidden>
+        <label>YouTube W <input type="number" id="uc-yt-w" value="1920" style="width:80px"></label>
+        <label>H        <input type="number" id="uc-yt-h" value="1080" style="width:80px"></label>
+        <label>Reels W  <input type="number" id="uc-rl-w" value="1080" style="width:80px"></label>
+        <label>H        <input type="number" id="uc-rl-h" value="1920" style="width:80px"></label>
       </div>
       <div class="row">
         <label>Capture area shift X

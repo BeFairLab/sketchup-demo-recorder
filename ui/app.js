@@ -292,6 +292,11 @@
   // editingPreset, NOT to currentSeq. Changes mark dirty; explicit Save
   // writes back to disk.
 
+  function showUniversalCustomEditor(show) {
+    document.getElementById('universal-custom-editor').hidden = !show;
+    document.getElementById('universal-custom-editor-fields').hidden = !show;
+  }
+
   function applyEditingPresetToControls() {
     const ep = editingPreset || defaultPresetBody();
     const vp = ep.viewport || {};
@@ -304,6 +309,13 @@
     const sh = vp.overlay_shift || { dx: 0, dy: 0 };
     document.getElementById('overlay-shift-x').value = sh.dx || 0;
     document.getElementById('overlay-shift-y').value = sh.dy || 0;
+    // Universal custom fields
+    const uc = vp.universal_custom || {};
+    document.getElementById('uc-yt-w').value = (uc.youtube && uc.youtube.w) || 1920;
+    document.getElementById('uc-yt-h').value = (uc.youtube && uc.youtube.h) || 1080;
+    document.getElementById('uc-rl-w').value = (uc.reels   && uc.reels.w)   || 1080;
+    document.getElementById('uc-rl-h').value = (uc.reels   && uc.reels.h)   || 1920;
+    showUniversalCustomEditor(vp.preset === 'universal_custom');
 
     const pb = ep.playback || {};
     document.getElementById('auto-path').checked = pb.auto_path === true;
@@ -335,6 +347,16 @@
     editingPreset.viewport.overlay_shift = {
       dx: parseInt(document.getElementById('overlay-shift-x').value, 10) || 0,
       dy: parseInt(document.getElementById('overlay-shift-y').value, 10) || 0,
+    };
+    editingPreset.viewport.universal_custom = {
+      youtube: {
+        w: parseInt(document.getElementById('uc-yt-w').value, 10) || 1920,
+        h: parseInt(document.getElementById('uc-yt-h').value, 10) || 1080,
+      },
+      reels: {
+        w: parseInt(document.getElementById('uc-rl-w').value, 10) || 1080,
+        h: parseInt(document.getElementById('uc-rl-h').value, 10) || 1920,
+      },
     };
     editingPreset.playback = editingPreset.playback || {};
     editingPreset.playback.auto_path          = document.getElementById('auto-path').checked;
@@ -696,9 +718,11 @@
     const opt = e.target.selectedOptions[0];
     if (opt.dataset.w) document.getElementById('vp-w').value = opt.dataset.w;
     if (opt.dataset.h) document.getElementById('vp-h').value = opt.dataset.h;
+    showUniversalCustomEditor(e.target.value === 'universal_custom');
     markEditingDirty();
   });
-  ['vp-w', 'vp-h', 'overlay-shift-x', 'overlay-shift-y'].forEach((id) => {
+  ['vp-w', 'vp-h', 'overlay-shift-x', 'overlay-shift-y',
+   'uc-yt-w', 'uc-yt-h', 'uc-rl-w', 'uc-rl-h'].forEach((id) => {
     document.getElementById(id).addEventListener('change', markEditingDirty);
   });
   document.querySelectorAll('input[name=vp-mode]').forEach((r) => {
