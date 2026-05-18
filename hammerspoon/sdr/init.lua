@@ -341,6 +341,16 @@ local function register_handlers()
     return { result = r, error = e }
   end)
 
+  -- Open an external URL (http/https/mailto) via system default handler.
+  -- hs.webview doesn't navigate target="_blank" anchors directly, so the
+  -- HTML side proxies anchor clicks here.
+  ui.register('open_url', function(payload)
+    local url = payload and payload.url
+    if not url or url == '' then return { error = 'no url' } end
+    hs.urlevent.openURL(url)
+    return { opened = url }
+  end)
+
   ui.register('start_record', function(payload)
     if not current_seq then return { error = 'load a sequence first' } end
     local append = payload and payload.append == true

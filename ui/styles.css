@@ -109,6 +109,7 @@ button.primary:hover { background: #006fe0; }
 .chip.event:hover { filter: brightness(0.96); }
 .chip.event.skipped { opacity: 0.4; text-decoration: line-through; }
 .chip.event.nop { background: #f0eef9; color: #555; font-style: italic; }
+.chip.event.has-comment { font-weight: 600; }
 
 .event-menu {
   position: absolute;

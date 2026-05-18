@@ -72,4 +72,4 @@ sketchup-demo-recorder/
 
 ## License
 
-Copyright 2026 Fair Lab. All rights reserved.
+[MIT License](LICENSE) — © 2026 Fair Lab (BeFairLab)

@@ -119,18 +119,8 @@
   }
 
   function updateActiveLabels() {
-    const pa = document.getElementById('preset-active');
-    if (pa) pa.textContent = currentSeq && currentSeq.preset_name ? currentSeq.preset_name : '— none —';
-    const ta = document.getElementById('timeline-active');
-    if (ta) ta.textContent = currentSeq && currentSeq.name ? currentSeq.name : '— none —';
-    const link = document.getElementById('timeline-preset-link');
-    if (link) {
-      if (currentSeq && currentSeq.preset_name) {
-        link.textContent = `Linked preset: ${currentSeq.preset_name}`;
-      } else {
-        link.textContent = 'No preset linked.';
-      }
-    }
+    // All active-label elements were removed from the layout; this is now
+    // a no-op kept as a safe hook for future re-introduction.
   }
 
   // ─── Sequence + Preset lists ────────────────────────────────────
@@ -400,6 +390,11 @@
       } else {
         evChip.title = JSON.stringify(evt, null, 2);
       }
+      // Append user comment so chips read as actions, not raw events.
+      if (evt.comment && evt.comment.length) {
+        label += ' — ' + evt.comment;
+        evChip.classList.add('has-comment');
+      }
       evChip.textContent = label;
       if (!evt._synthetic) {
         evChip.addEventListener('click', (e) => {
@@ -520,17 +515,13 @@
     }
   }
   document.getElementById('btn-apply-vp').addEventListener('click', applyViewport);
-  document.getElementById('btn-apply-vp-2') &&
-    document.getElementById('btn-apply-vp-2').addEventListener('click', applyViewport);
 
   // Single overlay toggle that flips between Show / Hide.
   let overlayVisible = false;
   function updateOverlayBtnLabels() {
     const label = overlayVisible ? 'Hide overlay' : 'Show overlay';
-    ['btn-toggle-overlay', 'btn-toggle-overlay-2'].forEach((id) => {
-      const el = document.getElementById(id);
-      if (el) el.textContent = label;
-    });
+    const el = document.getElementById('btn-toggle-overlay');
+    if (el) el.textContent = label;
   }
   async function toggleOverlay() {
     if (overlayVisible) {
@@ -544,8 +535,6 @@
     updateOverlayBtnLabels();
   }
   document.getElementById('btn-toggle-overlay').addEventListener('click', toggleOverlay);
-  document.getElementById('btn-toggle-overlay-2') &&
-    document.getElementById('btn-toggle-overlay-2').addEventListener('click', toggleOverlay);
 
   // ─── Timeline tab ──────────────────────────────────────────────
   document.getElementById('seq-select').addEventListener('change', (e) => loadSequence(e.target.value));
@@ -953,9 +942,19 @@
     return row;
   }
 
-  document.getElementById('btn-ping') && document.getElementById('btn-ping').addEventListener('click', async () => {
-    const r = await callLua('ping_companion', {});
-    document.getElementById('last-output').textContent = JSON.stringify(r);
+  // (btn-ping removed from header; ping companion via menubar → 'Ping Companion')
+
+  // Intercept all anchor clicks → open in system default browser via Lua,
+  // because hs.webview doesn't navigate target="_blank" links itself.
+  document.addEventListener('click', (e) => {
+    const a = e.target.closest && e.target.closest('a[href]');
+    if (!a) return;
+    const href = a.getAttribute('href');
+    if (!href || href.startsWith('#') || href.startsWith('javascript:')) return;
+    e.preventDefault();
+    callLua('open_url', { url: href }).catch((err) => {
+      document.getElementById('last-output').textContent = 'open_url failed: ' + err.message;
+    });
   });
 
   // ─── Init ──────────────────────────────────────────────────────
