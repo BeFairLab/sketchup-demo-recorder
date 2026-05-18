@@ -652,16 +652,35 @@
     r.addEventListener('change', markEditingDirty);
   });
 
-  // Recording
+  // Recording — buttons act as toggles, mirroring the ⌃⌥⌘R / ⌃⌥⌘E hotkeys.
+  let isRecording = false;
+  const _statusPushOrig = pushHandlers.status;
+  pushHandlers.status = (d) => {
+    isRecording = (d.status === 'recording');
+    _statusPushOrig(d);
+    updateRecButtonLabels();
+  };
+  function updateRecButtonLabels() {
+    document.getElementById('btn-rec').textContent =
+      isRecording ? '■ Stop recording' : '● Start / stop (fresh)';
+    document.getElementById('btn-rec-continue').textContent =
+      isRecording ? '■ Stop recording' : '↻ Continue (append)';
+  }
+
   document.getElementById('btn-rec').addEventListener('click', async () => {
     if (!currentSeq) return alert('load a timeline first');
-    await callLua('start_record', { append: false });
+    if (isRecording) await callLua('stop_record', {});
+    else await callLua('start_record', { append: false });
   });
 
   document.getElementById('btn-rec-continue').addEventListener('click', async () => {
     if (!currentSeq) return alert('load a timeline first');
-    await callLua('start_record', { append: true });
-    document.getElementById('last-output').textContent = 'continuing recording (append)';
+    if (isRecording) {
+      await callLua('stop_record', {});
+    } else {
+      await callLua('start_record', { append: true });
+      document.getElementById('last-output').textContent = 'continuing recording (append)';
+    }
   });
 
   // Playback / Output — mark dirty (no auto-save).

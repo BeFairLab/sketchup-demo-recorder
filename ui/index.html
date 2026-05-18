@@ -28,7 +28,6 @@
 
   <nav class="tabs">
     <button class="tab-btn active" data-tab="timeline">Timeline</button>
-    <button class="tab-btn" data-tab="recording">Recording</button>
     <button class="tab-btn" data-tab="preset">Preset settings</button>
     <button class="tab-btn" data-tab="manage">Manage</button>
     <button class="tab-btn" data-tab="about">About</button>
@@ -55,12 +54,32 @@
     </section>
 
     <section class="card">
+      <h2>Timeline recording</h2>
+      <div class="row">
+        <button id="btn-rec" class="primary">● Start / stop (fresh)</button>
+        <button id="btn-rec-continue">↻ Continue (append)</button>
+        <span id="rec-events" class="muted">0 events</span>
+      </div>
+      <div class="row">
+        <span class="muted">⌃⌥⌘R toggle fresh recording · ⌃⌥⌘E toggle continue</span>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Screen recording</h2>
+      <div class="row">
+        <button id="btn-play">▶ Play timeline (no capture)</button>
+        <button id="btn-capture" class="primary">⏺ Record screen + replay</button>
+      </div>
+      <div class="row">
+        <span class="muted">⌃⌥⌘P play timeline · capture button writes mp4 to ~/Desktop</span>
+      </div>
+    </section>
+
+    <section class="card">
       <h2>Timeline events <span id="timeline-meta" class="muted"></span></h2>
       <div class="row">
-        <button id="btn-play">▶ Play (no capture)</button>
-        <button id="btn-capture" class="primary">⏺ Record + Replay</button>
         <button id="btn-apply-auto">Apply auto-path to timeline (strip moves)</button>
-        <span class="muted">⌃⌥⌘P play</span>
       </div>
       <div id="timeline" class="timeline"></div>
     </section>
@@ -68,23 +87,6 @@
     <section class="card">
       <h2>Last output</h2>
       <div id="last-output" class="muted">—</div>
-    </section>
-  </div>
-
-  <!-- ─── RECORDING TAB ──────────────────────────────────── -->
-  <div class="tab" data-tab="recording" hidden>
-    <section class="card">
-      <h2>Recording</h2>
-      <div class="row">
-        <button id="btn-rec" class="primary">● Record clicks (fresh)</button>
-        <button id="btn-rec-continue">↻ Continue recording</button>
-      </div>
-      <div class="row">
-        <span class="muted">⌃⌥⌘R fresh · ⌃⌥⌘E continue · ⌃⌥⌘P play · ⌃⌥⌘V toggle UI</span>
-      </div>
-      <div class="row">
-        <span id="rec-events" class="muted">0 events</span>
-      </div>
     </section>
   </div>
 
