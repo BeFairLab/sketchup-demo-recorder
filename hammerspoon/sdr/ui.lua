@@ -118,7 +118,7 @@ function M.open(repo_root)
 
   local rect = hs.geometry.rect(120, 120, 980, 760)
   view = hs.webview.new(rect)
-    :windowTitle('SketchUp Demo Recorder')
+    :windowTitle('Fair SketchUp Demo Recorder')
     :windowStyle({ 'titled', 'closable', 'miniaturizable', 'resizable' })
     :allowTextEntry(true)
     :allowNewWindows(false)

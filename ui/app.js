@@ -233,8 +233,12 @@
     document.getElementById('auto-path-easing').value = pb.auto_path_easing || 'in_out';
     document.getElementById('click-effects').checked = pb.show_click_effects === true;
     document.getElementById('show-keystrokes').checked = pb.show_keystrokes === true;
-    document.getElementById('pre-delay-ms').value  = (pb.pre_delay_ms  != null) ? pb.pre_delay_ms  : 1000;
-    document.getElementById('post-delay-ms').value = (pb.post_delay_ms != null) ? pb.post_delay_ms : 1000;
+    const preMs  = (pb.pre_delay_ms  != null) ? pb.pre_delay_ms  : 1000;
+    const postMs = (pb.post_delay_ms != null) ? pb.post_delay_ms : 1000;
+    document.getElementById('pre-delay-ms').value  = preMs;
+    document.getElementById('post-delay-ms').value = postMs;
+    setRadioByValue('pre-delay-radio',  String(preMs));
+    setRadioByValue('post-delay-radio', String(postMs));
 
     const out = ep.output || {};
     document.getElementById('auto-crop-universal').checked = out.auto_crop_universal === true;
@@ -245,6 +249,34 @@
     document.getElementById('rescale-yt-h').value = out.rescale_youtube_h || 1080;
     document.getElementById('rescale-rl-w').value = out.rescale_reels_w || 1080;
     document.getElementById('rescale-rl-h').value = out.rescale_reels_h || 1920;
+    selectResolutionPreset('rescale-preset', out.rescale_w, out.rescale_h);
+    selectResolutionPreset('rescale-yt-preset', out.rescale_youtube_w, out.rescale_youtube_h);
+    selectResolutionPreset('rescale-rl-preset', out.rescale_reels_w, out.rescale_reels_h);
+  }
+
+  function setRadioByValue(groupName, value) {
+    const radios = document.querySelectorAll('input[name=' + groupName + ']');
+    let matched = false;
+    radios.forEach(r => {
+      if (r.value === value) { r.checked = true; matched = true; }
+      else r.checked = false;
+    });
+    if (!matched) {
+      // No preset matches → check the 'custom' radio
+      radios.forEach(r => { if (r.value === 'custom') r.checked = true; });
+    }
+  }
+
+  function selectResolutionPreset(selectId, w, h) {
+    const sel = document.getElementById(selectId);
+    if (!sel) return;
+    for (const opt of sel.options) {
+      if (parseInt(opt.dataset.w, 10) === w && parseInt(opt.dataset.h, 10) === h) {
+        sel.value = opt.value;
+        return;
+      }
+    }
+    sel.value = 'custom';
   }
 
   function readControlsIntoEditingPreset() {
@@ -649,6 +681,52 @@
    'auto-crop-universal', 'auto-rescale', 'rescale-w', 'rescale-h',
    'rescale-yt-w', 'rescale-yt-h', 'rescale-rl-w', 'rescale-rl-h']
     .forEach((id) => document.getElementById(id).addEventListener('change', markEditingDirty));
+
+  // Pre/post-delay radios: clicking a preset value populates the number input.
+  document.querySelectorAll('input[name=pre-delay-radio]').forEach((r) => {
+    r.addEventListener('change', () => {
+      if (r.value !== 'custom') document.getElementById('pre-delay-ms').value = r.value;
+      markEditingDirty();
+    });
+  });
+  document.querySelectorAll('input[name=post-delay-radio]').forEach((r) => {
+    r.addEventListener('change', () => {
+      if (r.value !== 'custom') document.getElementById('post-delay-ms').value = r.value;
+      markEditingDirty();
+    });
+  });
+  // Custom ms input → switch radio to custom.
+  document.getElementById('pre-delay-ms').addEventListener('input', () => {
+    setRadioByValue('pre-delay-radio', document.getElementById('pre-delay-ms').value);
+    markEditingDirty();
+  });
+  document.getElementById('post-delay-ms').addEventListener('input', () => {
+    setRadioByValue('post-delay-radio', document.getElementById('post-delay-ms').value);
+    markEditingDirty();
+  });
+
+  // Resolution preset selectors → populate W/H inputs.
+  function wireResolutionPreset(presetId, wId, hId) {
+    document.getElementById(presetId).addEventListener('change', (e) => {
+      const opt = e.target.selectedOptions[0];
+      if (opt && opt.dataset.w) document.getElementById(wId).value = opt.dataset.w;
+      if (opt && opt.dataset.h) document.getElementById(hId).value = opt.dataset.h;
+      markEditingDirty();
+    });
+    document.getElementById(wId).addEventListener('input', () => {
+      selectResolutionPreset(presetId,
+        parseInt(document.getElementById(wId).value, 10),
+        parseInt(document.getElementById(hId).value, 10));
+    });
+    document.getElementById(hId).addEventListener('input', () => {
+      selectResolutionPreset(presetId,
+        parseInt(document.getElementById(wId).value, 10),
+        parseInt(document.getElementById(hId).value, 10));
+    });
+  }
+  wireResolutionPreset('rescale-preset',    'rescale-w',    'rescale-h');
+  wireResolutionPreset('rescale-yt-preset', 'rescale-yt-w', 'rescale-yt-h');
+  wireResolutionPreset('rescale-rl-preset', 'rescale-rl-w', 'rescale-rl-h');
 
   document.getElementById('btn-apply-auto').addEventListener('click', async () => {
     if (!currentSeq) return;

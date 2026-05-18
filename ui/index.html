@@ -2,12 +2,12 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>SketchUp Demo Recorder</title>
+  <title>Fair SketchUp Demo Recorder</title>
   <link rel="stylesheet" href="/static/styles.css">
 </head>
 <body>
   <header>
-    <h1>SketchUp Demo Recorder</h1>
+    <h1>Fair SketchUp Demo Recorder</h1>
     <div class="status">
       <span id="status-dot" class="dot idle"></span>
       <span id="status-text">idle</span>
@@ -31,6 +31,7 @@
     <button class="tab-btn" data-tab="recording">Recording</button>
     <button class="tab-btn" data-tab="preset">Preset settings</button>
     <button class="tab-btn" data-tab="manage">Manage</button>
+    <button class="tab-btn" data-tab="about">About</button>
   </nav>
 
   <!-- ─── TIMELINE TAB ───────────────────────────────────── -->
@@ -49,7 +50,7 @@
         <label>Linked preset
           <select id="seq-preset-link"></select>
         </label>
-        <span class="muted">— preset that loads automatically with this timeline; mirrors to header</span>
+        <span class="muted">— mirrors to header on change</span>
       </div>
     </section>
 
@@ -96,58 +97,63 @@
           <select id="preset-select-edit"></select>
         </label>
         <button id="btn-preset-new">New… (defaults)</button>
-        <button id="btn-preset-save">Save changes</button>
+        <button id="btn-preset-save" class="primary">Save changes</button>
         <button id="btn-preset-duplicate">Duplicate…</button>
         <span id="preset-dirty" class="muted"></span>
       </div>
       <div class="row">
-        <span class="muted">This tab edits preset files. The active preset for capture is set in the header.</span>
+        <span class="muted">This tab edits preset files. Active preset for capture is set in the header.</span>
       </div>
     </section>
 
     <section class="card">
       <h2>Viewport</h2>
       <div class="row">
-        <button id="btn-apply-vp-2" class="primary">Apply to SketchUp</button>
-        <button id="btn-toggle-overlay-2">Show overlay</button>
-      </div>
-      <div class="row">
         <label><input type="radio" name="vp-mode" value="viewport" checked> Viewport (model area)</label>
         <label><input type="radio" name="vp-mode" value="window"> Window</label>
       </div>
       <div class="row">
-        <label>Resolution preset
+        <label>Resolution
           <select id="vp-preset">
-            <option value="youtube_1080p"  data-w="1920" data-h="1080">YouTube 1920×1080</option>
-            <option value="fhd_1_5x"       data-w="2880" data-h="1620">FHD 1.5× 2880×1620</option>
-            <option value="reels_1080p"    data-w="1080" data-h="1920">Reels/TikTok 1080×1920</option>
-            <option value="square_1080"    data-w="1080" data-h="1080">Square 1080×1080</option>
-            <option value="universal_1920" data-w="1920" data-h="1920">Universal Square 1920×1920 (no clamp)</option>
-            <option value="universal_2160" data-w="2160" data-h="2160">Universal Square 2160×2160 (slight clamp)</option>
-            <option value="universal_custom" data-w="1920" data-h="1920">Universal Custom (editable below)</option>
-            <option value="custom" data-w="" data-h="">Custom…</option>
+            <option value="youtube_1080p"   data-w="1920" data-h="1080">YouTube 1920×1080</option>
+            <option value="fhd_1_5x"        data-w="2880" data-h="1620">FHD 1.5× 2880×1620</option>
+            <option value="reels_1080p"     data-w="1080" data-h="1920">Reels / TikTok 1080×1920</option>
+            <option value="square_1080"     data-w="1080" data-h="1080">Square 1080×1080</option>
+            <option value="universal_1920"  data-w="1920" data-h="1920">Universal Square 1920×1920</option>
+            <option value="universal_2160"  data-w="2160" data-h="2160">Universal Square 2160×2160</option>
+            <option value="universal_custom" data-w="1920" data-h="1920">Universal Custom</option>
+            <option value="custom" data-w="" data-h="">Custom</option>
           </select>
         </label>
-        <label>W <input type="number" id="vp-w" value="1920" style="width:80px"></label>
-        <label>H <input type="number" id="vp-h" value="1080" style="width:80px"></label>
-      </div>
-      <div class="row" id="universal-custom-editor" hidden>
-        <span class="muted">Universal Custom crop targets (pixels). Source uses W × H above.</span>
-      </div>
-      <div class="row" id="universal-custom-editor-fields" hidden>
-        <label>YouTube W <input type="number" id="uc-yt-w" value="1920" style="width:80px"></label>
-        <label>H        <input type="number" id="uc-yt-h" value="1080" style="width:80px"></label>
-        <label>Reels W  <input type="number" id="uc-rl-w" value="1080" style="width:80px"></label>
-        <label>H        <input type="number" id="uc-rl-h" value="1920" style="width:80px"></label>
       </div>
       <div class="row">
+        <label>W <input type="number" id="vp-w" value="1920" style="width:90px"></label>
+        <label>H <input type="number" id="vp-h" value="1080" style="width:90px"></label>
+      </div>
+
+      <div id="universal-custom-editor" hidden>
+        <div class="row">
+          <span class="muted">Universal custom crop targets (in source pixels):</span>
+        </div>
+        <div class="row">
+          <span class="lbl">Horizontal (YouTube)</span>
+          <label>W <input type="number" id="uc-yt-w" value="1920" style="width:90px"></label>
+          <label>H <input type="number" id="uc-yt-h" value="1080" style="width:90px"></label>
+        </div>
+        <div class="row">
+          <span class="lbl">Vertical (Reels)</span>
+          <label>W <input type="number" id="uc-rl-w" value="1080" style="width:90px"></label>
+          <label>H <input type="number" id="uc-rl-h" value="1920" style="width:90px"></label>
+        </div>
+      </div>
+
+      <div class="row">
         <label>Capture area shift X
-          <input type="number" id="overlay-shift-x" value="0" step="1" style="width:70px">
+          <input type="number" id="overlay-shift-x" value="0" step="1" style="width:80px">
         </label>
         <label>Y
-          <input type="number" id="overlay-shift-y" value="0" step="1" style="width:70px">
+          <input type="number" id="overlay-shift-y" value="0" step="1" style="width:80px">
         </label>
-        <span class="muted">nudges overlay + capture region together</span>
       </div>
     </section>
 
@@ -155,10 +161,14 @@
       <h2>Playback</h2>
       <div class="row">
         <label><input type="checkbox" id="auto-path"> Auto-path (straight-line robot motion between clicks)</label>
+      </div>
+      <div class="row">
         <label>Speed
-          <input type="number" id="auto-path-pps" value="1000" min="100" max="8000" step="100" style="width:80px">
+          <input type="number" id="auto-path-pps" value="1000" min="100" max="8000" step="100" style="width:90px">
           <span class="muted">px/s</span>
         </label>
+      </div>
+      <div class="row">
         <label>Easing
           <select id="auto-path-easing">
             <option value="in_out" selected>Ease in-out (quintic)</option>
@@ -170,19 +180,28 @@
       </div>
       <div class="row">
         <label><input type="checkbox" id="click-effects"> Show click circles</label>
+      </div>
+      <div class="row">
         <label><input type="checkbox" id="show-keystrokes"> Show keystrokes (English; includes modifier-only clicks)</label>
       </div>
+
       <div class="row">
-        <label>Pre-delay
-          <input type="number" id="pre-delay-ms" value="1000" min="0" step="100" style="width:90px">
-          <span class="muted">ms BEFORE first event during play/capture (so SU has time to focus + screen-record buffers)</span>
-        </label>
+        <span class="lbl">Pre-delay</span>
+        <label><input type="radio" name="pre-delay-radio" value="0"> 0</label>
+        <label><input type="radio" name="pre-delay-radio" value="500"> 500ms</label>
+        <label><input type="radio" name="pre-delay-radio" value="1000" checked> 1s</label>
+        <label><input type="radio" name="pre-delay-radio" value="2000"> 2s</label>
+        <label><input type="radio" name="pre-delay-radio" value="custom"> Custom</label>
+        <input type="number" id="pre-delay-ms" value="1000" min="0" step="50" style="width:90px"> ms
       </div>
       <div class="row">
-        <label>Post-delay
-          <input type="number" id="post-delay-ms" value="1000" min="0" step="100" style="width:90px">
-          <span class="muted">ms AFTER last event before stopping capture (tail buffer in mp4)</span>
-        </label>
+        <span class="lbl">Post-delay</span>
+        <label><input type="radio" name="post-delay-radio" value="0"> 0</label>
+        <label><input type="radio" name="post-delay-radio" value="500"> 500ms</label>
+        <label><input type="radio" name="post-delay-radio" value="1000" checked> 1s</label>
+        <label><input type="radio" name="post-delay-radio" value="2000"> 2s</label>
+        <label><input type="radio" name="post-delay-radio" value="custom"> Custom</label>
+        <input type="number" id="post-delay-ms" value="1000" min="0" step="50" style="width:90px"> ms
       </div>
     </section>
 
@@ -190,8 +209,22 @@
       <h2>Output — non-universal</h2>
       <div class="row">
         <label><input type="checkbox" id="auto-rescale"> Rescale captured mp4</label>
-        <label>W <input type="number" id="rescale-w" value="1920" min="0" style="width:80px"></label>
-        <label>H <input type="number" id="rescale-h" value="1080" min="0" style="width:80px"></label>
+      </div>
+      <div class="row">
+        <label>Resolution
+          <select id="rescale-preset">
+            <option value="480"   data-w="854"  data-h="480">480p — 854×480</option>
+            <option value="720"   data-w="1280" data-h="720">720p — 1280×720</option>
+            <option value="1080"  data-w="1920" data-h="1080" selected>1080p — 1920×1080</option>
+            <option value="1440"  data-w="2560" data-h="1440">1440p — 2560×1440</option>
+            <option value="2160"  data-w="3840" data-h="2160">4K — 3840×2160</option>
+            <option value="custom" data-w="" data-h="">Custom</option>
+          </select>
+        </label>
+      </div>
+      <div class="row">
+        <label>W <input type="number" id="rescale-w" value="1920" min="0" style="width:90px"></label>
+        <label>H <input type="number" id="rescale-h" value="1080" min="0" style="width:90px"></label>
       </div>
     </section>
 
@@ -201,14 +234,38 @@
         <label><input type="checkbox" id="auto-crop-universal"> Auto-crop → YouTube + Reels mp4</label>
       </div>
       <div class="row">
-        <span class="muted">Rescale horizontal (YouTube crop)</span>
-        <label>W <input type="number" id="rescale-yt-w" value="1920" min="0" style="width:80px"></label>
-        <label>H <input type="number" id="rescale-yt-h" value="1080" min="0" style="width:80px"></label>
+        <span class="lbl">Horizontal (YouTube)</span>
+        <label>Resolution
+          <select id="rescale-yt-preset">
+            <option value="480"  data-w="854"  data-h="480">480p — 854×480</option>
+            <option value="720"  data-w="1280" data-h="720">720p — 1280×720</option>
+            <option value="1080" data-w="1920" data-h="1080" selected>1080p — 1920×1080</option>
+            <option value="1440" data-w="2560" data-h="1440">1440p — 2560×1440</option>
+            <option value="2160" data-w="3840" data-h="2160">4K — 3840×2160</option>
+            <option value="custom" data-w="" data-h="">Custom</option>
+          </select>
+        </label>
       </div>
       <div class="row">
-        <span class="muted">Rescale vertical (Reels crop)</span>
-        <label>W <input type="number" id="rescale-rl-w" value="1080" min="0" style="width:80px"></label>
-        <label>H <input type="number" id="rescale-rl-h" value="1920" min="0" style="width:80px"></label>
+        <label>W <input type="number" id="rescale-yt-w" value="1920" min="0" style="width:90px"></label>
+        <label>H <input type="number" id="rescale-yt-h" value="1080" min="0" style="width:90px"></label>
+      </div>
+      <div class="row">
+        <span class="lbl">Vertical (Reels)</span>
+        <label>Resolution
+          <select id="rescale-rl-preset">
+            <option value="480"  data-w="270"  data-h="480">480p — 270×480</option>
+            <option value="720"  data-w="406"  data-h="720">720p — 406×720</option>
+            <option value="1080" data-w="608"  data-h="1080">1080p — 608×1080</option>
+            <option value="reels_1080" data-w="1080" data-h="1920" selected>Reels 1080×1920</option>
+            <option value="reels_1440" data-w="1440" data-h="2560">Reels 1440×2560</option>
+            <option value="custom" data-w="" data-h="">Custom</option>
+          </select>
+        </label>
+      </div>
+      <div class="row">
+        <label>W <input type="number" id="rescale-rl-w" value="1080" min="0" style="width:90px"></label>
+        <label>H <input type="number" id="rescale-rl-h" value="1920" min="0" style="width:90px"></label>
       </div>
     </section>
 
@@ -223,6 +280,26 @@
     <section class="card">
       <h2>Timelines</h2>
       <div id="manage-timelines" class="manage-list"></div>
+    </section>
+  </div>
+
+  <!-- ─── ABOUT TAB ──────────────────────────────────────── -->
+  <div class="tab" data-tab="about" hidden>
+    <section class="card">
+      <h2>Fair SketchUp Demo Recorder</h2>
+      <div class="row"><span class="muted">A Hammerspoon-based tool by Fair Lab for recording and replaying SketchUp demos with auto-path replay, click/keystroke overlays, and universal-preset auto-crop.</span></div>
+      <div class="row">
+        <a href="http://befairlab.com/" target="_blank">befairlab.com</a>
+        <span class="muted">·</span>
+        <a href="mailto:hi@befairlab.com">hi@befairlab.com</a>
+        <span class="muted">·</span>
+        <a href="https://github.com/BeFairLab" target="_blank">GitHub @BeFairLab</a>
+        <span class="muted">·</span>
+        <a href="https://www.youtube.com/@BeFairLab" target="_blank">YouTube @BeFairLab</a>
+      </div>
+      <div class="row">
+        <span class="muted">Source: <a href="https://github.com/BeFairLab/sketchup-demo-recorder" target="_blank">github.com/BeFairLab/sketchup-demo-recorder</a></span>
+      </div>
     </section>
   </div>
 
