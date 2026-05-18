@@ -203,8 +203,8 @@
   // writes back to disk.
 
   function showUniversalCustomEditor(show) {
-    document.getElementById('universal-custom-editor').hidden = !show;
-    document.getElementById('universal-custom-editor-fields').hidden = !show;
+    const el = document.getElementById('universal-custom-editor');
+    if (el) el.hidden = !show;
   }
 
   function applyEditingPresetToControls() {
@@ -681,6 +681,14 @@
       await callLua('save_preset', { name: editingPreset.name, sequence: editingPreset });
       editingPresetDirty = false;
       updateDirtyBadge();
+      // If this preset is linked to the active timeline, push the fresh
+      // values so Play/Capture see them immediately (no extra reload).
+      if (currentSeq && currentSeq.preset_name === editingPreset.name) {
+        currentSeq.viewport       = editingPreset.viewport;
+        currentSeq.playback       = editingPreset.playback;
+        currentSeq.output         = editingPreset.output;
+        currentSeq.chrome_offsets = editingPreset.chrome_offsets;
+      }
       document.getElementById('last-output').textContent = 'preset saved: ' + editingPreset.name;
     } catch (e) { alert('save failed: ' + e.message); }
   });
@@ -830,17 +838,31 @@
     renderTimeline();
   });
 
-  // For Play/Capture, use the currentSeq as-is (which carries the linked
-  // preset's settings). Don't read from the preset-tab UI controls — they're
-  // for editing presets, NOT for live playback overrides.
+  // Pull the latest preset values into currentSeq before playback — picks up
+  // any preset edits made in the Preset Settings tab without requiring the
+  // user to re-link manually.
+  async function refreshCurrentSeqFromPreset() {
+    if (!currentSeq || !currentSeq.preset_name) return;
+    const preset = await callLua('get_preset', { name: currentSeq.preset_name })
+      .catch(() => null);
+    if (preset && !preset.error) {
+      currentSeq.viewport       = preset.viewport       || currentSeq.viewport;
+      currentSeq.playback       = preset.playback       || currentSeq.playback;
+      currentSeq.output         = preset.output         || currentSeq.output;
+      currentSeq.chrome_offsets = preset.chrome_offsets || currentSeq.chrome_offsets;
+    }
+  }
+
   document.getElementById('btn-play').addEventListener('click', async () => {
     if (!currentSeq) return;
+    await refreshCurrentSeqFromPreset();
     await callLua('set_active_sequence', { sequence: currentSeq });
     callLua('play', { sequence: currentSeq });
   });
 
   document.getElementById('btn-capture').addEventListener('click', async () => {
     if (!currentSeq) return;
+    await refreshCurrentSeqFromPreset();
     await callLua('set_active_sequence', { sequence: currentSeq });
     const r = await callLua('capture_and_play', {});
     if (r.error) alert(r.error);
